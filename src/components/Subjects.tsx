@@ -9,6 +9,7 @@ export interface ChapterStatus {
   revisionCycle: number; // 0 = none, 1, 2, 3 cycles
   isCustom?: boolean;
   videoUrl?: string;
+  ldrNotes?: string;
 }
 
 export interface ProgressState {
@@ -37,7 +38,6 @@ export const Subjects: React.FC<SubjectsProps> = ({
   progressState,
   onToggleClass,
   onSetPriority,
-  onToggleLdrs,
   onToggleRevisionCycle,
   onAddChapter,
   onDeleteChapter,
@@ -182,13 +182,6 @@ export const Subjects: React.FC<SubjectsProps> = ({
     alert(`Subject "${newSubjectName.trim()}" added!`);
   };
 
-  const handleActionCall = (type: string, name: string) => {
-    if (type === 'notes') {
-      alert(`Opening offline PDF notes for: ${name}`);
-    } else if (type === 'video') {
-      alert(`Launching video lecture module for: ${name}`);
-    }
-  };
 
   // Calculate subject progress ratio
   const calculateSubjectProgress = (subName: string, chapters: string[]) => {
@@ -821,7 +814,7 @@ export const Subjects: React.FC<SubjectsProps> = ({
               ref={editorRef}
               className="notepad-textarea content-editable-notepad"
               contentEditable
-              placeholder="Write your Last Day Revision (LDR) notes here... e.g. key formulas, adjustments to check, or critical questions."
+              {...({ placeholder: "Write your Last Day Revision (LDR) notes here... e.g. key formulas, adjustments to check, or critical questions." } as any)}
             />
           </div>
         </div>

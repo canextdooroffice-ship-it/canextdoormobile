@@ -1,5 +1,5 @@
 import React from 'react';
-import { Flame, Calendar, Target, Timer, Check, Plus, Trash2, X, Clock } from 'lucide-react';
+import { Flame, Calendar, Target, Timer, Check, Trash2, X, Clock } from 'lucide-react';
 import { SYLLABUS_DATA } from '../constants/syllabus';
 import type { ProgressState } from './Subjects';
 
@@ -17,7 +17,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
   caLevel,
   studyTarget,
   totalHours,
-  onStartSession,
   progressState,
 }) => {
   // Extract user alias from email
