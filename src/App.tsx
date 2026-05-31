@@ -447,16 +447,6 @@ function App() {
 
   return (
     <div className="app-shell-wrapper">
-      {/* simulated premium status bar */}
-      <div className="phone-status-bar">
-        <span>{currentTime}</span>
-        <div className="status-bar-icons">
-          <span className="status-dot"></span>
-          <Wifi size={13} />
-          <Battery size={15} />
-        </div>
-      </div>
-
       {/* Screen Content wrapper */}
       <div className="screen-content">
         {!session ? (

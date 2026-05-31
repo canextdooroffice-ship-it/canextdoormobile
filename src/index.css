@@ -47,51 +47,16 @@ body {
   overflow: hidden;
 }
 
-/* App shell: mimics a phone frame on desktop, standard layout on mobile */
+/* App shell: fills the viewport on both desktop and mobile */
 .app-shell-wrapper {
   width: 100%;
-  max-width: 440px;
   height: 100vh;
-  max-height: 880px;
   background-color: var(--bg-primary);
   position: relative;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 30px 60px -15px rgba(15, 23, 42, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.03);
-  border-radius: 40px;
-  border: 10px solid #cbd5e1; /* Gray Bezel Frame */
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Status Bar Simulator for desktop view */
-.phone-status-bar {
-  height: 28px;
-  background: var(--bg-primary);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 28px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  user-select: none;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.status-bar-icons {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.status-dot {
-  width: 6px;
-  height: 6px;
-  background-color: var(--accent-green);
-  border-radius: 50%;
-  display: inline-block;
-  margin-right: 4px;
 }
 
 /* Scrollable screen container */
@@ -106,19 +71,10 @@ body {
   display: none; /* Chrome/Safari */
 }
 
-/* Responsive adjustment for actual mobile screens */
-@media (max-width: 480px) {
-  body {
-    background-color: var(--bg-primary);
-  }
-  .app-shell-wrapper {
-    max-height: 100vh;
-    border: none;
-    border-radius: 0;
-  }
-  .phone-status-bar {
-    padding: 0 16px;
-  }
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-primary);
 }
 
 /* ---------------------------------------------------- */
