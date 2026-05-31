@@ -11,7 +11,6 @@ import { Profile } from './components/Profile';
 import { Subjects } from './components/Subjects';
 import { SYLLABUS_DATA } from './constants/syllabus';
 import type { ProgressState } from './components/Subjects';
-import { Wifi, Battery } from 'lucide-react';
 
 // ---- localStorage persistence keys ----
 const LS_KEYS = {
@@ -99,7 +98,6 @@ const buildInitialProgress = (): ProgressState => {
 function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [activeTab, setActiveTab] = useState<string>('home');
-  const [currentTime, setCurrentTime] = useState<string>('12:00 PM');
   
   // CA Student settings — loaded from localStorage first, then Supabase metadata
   const [caLevel, setCaLevel] = useState<string>(() => loadFromStorage(LS_KEYS.CA_LEVEL, 'Intermediate'));
@@ -176,20 +174,6 @@ function App() {
   }, [progressState, caLevel, studyTarget, totalHours, session]);
 
 
-  // Mock status bar clock
-  useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      let hrs = now.getHours();
-      const mins = now.getMinutes().toString().padStart(2, '0');
-      const ampm = hrs >= 12 ? 'PM' : 'AM';
-      hrs = hrs % 12 || 12; // 0 hour format
-      setCurrentTime(`${hrs}:${mins} ${ampm}`);
-    };
-    updateTime();
-    const interval = setInterval(updateTime, 60000);
-    return () => clearInterval(interval);
-  }, []);
 
   const loadUserMetadata = (currentSession: Session | null) => {
     if (currentSession?.user?.user_metadata) {
