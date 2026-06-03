@@ -363,33 +363,34 @@ export const Subjects: React.FC<SubjectsProps> = ({
                 className="styled-task-input"
               />
             </div>
-            <div className="form-row mt-2">
-              <div className="input-group">
-                <label>Subject</label>
-                <select
-                  value={newChapterSub}
-                  onChange={(e) => setNewChapterSub(e.target.value)}
-                  className="styled-select"
-                >
-                  {getAllSubjects().map((sub) => (
-                    <option key={sub} value={sub}>{sub}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="input-group shrink">
-                <label>Priority</label>
-                <select
-                  value={newChapterPriority}
-                  onChange={(e) => setNewChapterPriority(e.target.value as 'A' | 'B' | 'C')}
-                  className="styled-select"
-                >
-                  <option value="A">A</option>
-                  <option value="B">B</option>
-                  <option value="C">C</option>
-                </select>
+            <div className="input-group mt-3">
+              <label>Subject</label>
+              <select
+                value={newChapterSub}
+                onChange={(e) => setNewChapterSub(e.target.value)}
+                className="styled-select"
+              >
+                {getAllSubjects().map((sub) => (
+                  <option key={sub} value={sub}>{sub}</option>
+                ))}
+              </select>
+            </div>
+            <div className="input-group mt-3">
+              <label>Priority</label>
+              <div className="form-priority-btn-group">
+                {(['A', 'B', 'C'] as const).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setNewChapterPriority(p)}
+                    className={`form-priority-btn ${p} ${newChapterPriority === p ? 'active' : ''}`}
+                  >
+                    {p}
+                  </button>
+                ))}
               </div>
             </div>
-            <button type="submit" className="action-button-primary mt-3 py-2 text-sm">
+            <button type="submit" className="action-button-primary mt-4">
               <span>Add Chapter</span>
             </button>
           </form>
