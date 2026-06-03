@@ -73,6 +73,17 @@ const buildInitialProgress = (): ProgressState => {
 };
 
 function App() {
+  // One-time migration: clear stale mock streak data from old localStorage keys
+  useState(() => {
+    try {
+      if (!localStorage.getItem('cand_streak_migrated_v1')) {
+        localStorage.removeItem('cand_streakCount');
+        localStorage.removeItem('cand_checkedInToday');
+        localStorage.setItem('cand_streak_migrated_v1', '1');
+      }
+    } catch { /* ignore */ }
+  });
+
   const [session, setSession] = useState<Session | null>(null);
   const [activeTab, setActiveTab] = useState<string>('home');
   
@@ -101,13 +112,8 @@ function App() {
   const [tasks, setTasks] = useState<Task[]>(() => loadFromStorage(LS_KEYS.TASKS, []));
   const [revisions, setRevisions] = useState<RevisionItem[]>(() => loadFromStorage(LS_KEYS.REVISIONS, []));
   const [mistakes, setMistakes] = useState<Mistake[]>(() => loadFromStorage(LS_KEYS.MISTAKES, []));
-  const [streakCount, setStreakCount] = useState<number>(() => {
-    const stored = loadFromStorage(LS_KEYS.STREAK_COUNT, 0);
-    return typeof stored === 'number' ? stored : 0;
-  });
-  const [checkedInToday, setCheckedInToday] = useState<boolean>(() => {
-    return loadFromStorage(LS_KEYS.CHECKED_IN_TODAY, false);
-  });
+  const [streakCount, setStreakCount] = useState<number>(0);
+  const [checkedInToday, setCheckedInToday] = useState<boolean>(false);
 
   // ---- Lifted Pomodoro Timer State (persists across tab switches) ----
   const [timerTimeLeft, setTimerTimeLeft] = useState(25 * 60);
@@ -215,8 +221,8 @@ function App() {
   useEffect(() => { saveToStorage(LS_KEYS.TASKS, tasks); }, [tasks]);
   useEffect(() => { saveToStorage(LS_KEYS.REVISIONS, revisions); }, [revisions]);
   useEffect(() => { saveToStorage(LS_KEYS.MISTAKES, mistakes); }, [mistakes]);
-  useEffect(() => { saveToStorage(LS_KEYS.STREAK_COUNT, streakCount); }, [streakCount]);
-  useEffect(() => { saveToStorage(LS_KEYS.CHECKED_IN_TODAY, checkedInToday); }, [checkedInToday]);
+
+
 
   // ---- Supabase cloud backup sync ----
   const syncTimerRef = useRef<number | null>(null);
@@ -250,6 +256,7 @@ function App() {
             examStartDate?: string;
             streakCount?: number;
             checkedInToday?: boolean;
+            streakMigrated?: boolean;
           };
           setProgressState(packed.checklist || {});
           setTasks(packed.tasks || []);
@@ -258,8 +265,11 @@ function App() {
           setSlots(packed.slots || []);
           if (packed.fullName) setFullName(packed.fullName);
           if (packed.examStartDate) setExamStartDate(packed.examStartDate);
-          if (packed.streakCount !== undefined) setStreakCount(packed.streakCount);
-          if (packed.checkedInToday !== undefined) setCheckedInToday(packed.checkedInToday);
+          // Only restore streak from cloud if migration flag is set (avoids stale mock data)
+          if (packed.streakMigrated) {
+            if (packed.streakCount !== undefined) setStreakCount(packed.streakCount);
+            if (packed.checkedInToday !== undefined) setCheckedInToday(packed.checkedInToday);
+          }
         } else {
           // Old format (just progressState)
           setProgressState(cloudState || {});
@@ -282,7 +292,8 @@ function App() {
           fullName: fn,
           examStartDate: esd,
           streakCount: sc,
-          checkedInToday: cit
+          checkedInToday: cit,
+          streakMigrated: true
         };
 
         await saveToSupabase(userId, {
@@ -315,7 +326,8 @@ function App() {
         fullName,
         examStartDate,
         streakCount,
-        checkedInToday
+        checkedInToday,
+        streakMigrated: true
       };
 
       saveToSupabase(userId, {
