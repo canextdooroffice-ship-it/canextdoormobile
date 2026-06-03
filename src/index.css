@@ -6364,49 +6364,61 @@ body {
    ======================================== */
 .sticky-mini-timer {
   position: fixed;
-  bottom: 72px;
+  bottom: 84px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 9998;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 14px;
-  border-radius: 50px;
-  background: linear-gradient(135deg, rgba(30, 30, 50, 0.92), rgba(20, 20, 40, 0.96));
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(192, 132, 252, 0.3);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(192, 132, 252, 0.1) inset;
-  max-width: 380px;
-  width: auto;
-  animation: slideUpMiniTimer 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  gap: 16px;
+  padding: 12px 18px;
+  border-radius: 16px;
+  background: rgba(17, 12, 28, 0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(168, 85, 247, 0.25);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(168, 85, 247, 0.1) inset;
+  width: calc(100% - 32px);
+  max-width: 360px;
+  animation: slideUpMiniTimer 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .sticky-mini-timer.break-mode {
-  border-color: rgba(52, 211, 153, 0.35);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(52, 211, 153, 0.1) inset;
+  border-color: rgba(16, 185, 129, 0.25);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(16, 185, 129, 0.1) inset;
 }
 
 .sticky-mini-timer.running {
-  animation: slideUpMiniTimer 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards, pulseGlowMini 2.5s ease-in-out infinite;
+  animation: slideUpMiniTimer 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards, pulseGlowMini 3s ease-in-out infinite;
+}
+
+.sticky-mini-timer.break-mode.running {
+  animation: slideUpMiniTimer 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards, pulseGlowMiniBreak 3s ease-in-out infinite;
 }
 
 @keyframes slideUpMiniTimer {
-  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+  from { opacity: 0; transform: translateX(-50%) translateY(24px); }
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
 @keyframes pulseGlowMini {
-  0%, 100% { box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(192, 132, 252, 0.1) inset; }
-  50% { box-shadow: 0 8px 32px rgba(192, 132, 252, 0.2), 0 0 12px rgba(192, 132, 252, 0.15), 0 0 0 1px rgba(192, 132, 252, 0.2) inset; }
+  0%, 100% { box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(168, 85, 247, 0.1) inset; }
+  50% { box-shadow: 0 12px 40px rgba(168, 85, 247, 0.25), 0 0 20px rgba(168, 85, 247, 0.15), 0 0 0 1px rgba(168, 85, 247, 0.2) inset; }
+}
+
+@keyframes pulseGlowMiniBreak {
+  0%, 100% { box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(16, 185, 129, 0.1) inset; }
+  50% { box-shadow: 0 12px 40px rgba(16, 185, 129, 0.25), 0 0 20px rgba(16, 185, 129, 0.15), 0 0 0 1px rgba(16, 185, 129, 0.2) inset; }
+}
+
+.mini-timer-left {
+  flex-shrink: 0;
 }
 
 .mini-timer-ring {
   position: relative;
-  width: 36px;
-  height: 36px;
-  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -6418,54 +6430,53 @@ body {
   left: 0;
 }
 
-.mini-timer-countdown {
+.mini-timer-icon-inner {
   position: relative;
   z-index: 1;
-  font-size: 9px;
-  font-weight: 800;
-  color: #fff;
-  letter-spacing: 0.3px;
-  font-variant-numeric: tabular-nums;
-}
-
-.mini-timer-info {
   display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
-
-.mini-timer-status {
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 1.2px;
+  align-items: center;
+  justify-content: center;
   color: #c084fc;
-  text-transform: uppercase;
 }
 
-.sticky-mini-timer.break-mode .mini-timer-status {
+.sticky-mini-timer.break-mode .mini-timer-icon-inner {
   color: #34d399;
 }
 
-.sticky-mini-timer.paused .mini-timer-status {
+.sticky-mini-timer.paused .mini-timer-icon-inner {
   color: #facc15;
 }
 
-.mini-timer-label {
+.mini-timer-center {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  flex-grow: 1;
+  min-width: 0;
+}
+
+.mini-timer-time {
+  font-size: 20px;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1.1;
+  letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mini-timer-subtitle {
   font-size: 10px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.55);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 130px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  margin-top: 2px;
 }
 
 .mini-timer-controls {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-left: auto;
+  gap: 8px;
   flex-shrink: 0;
 }
 
@@ -6473,51 +6484,55 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
   border: none;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.85);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .mini-timer-btn:hover {
-  background: rgba(255, 255, 255, 0.16);
-  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
 }
 
 .mini-timer-btn:active {
-  transform: scale(0.9);
+  transform: scale(0.92);
 }
 
-.mini-timer-btn.close {
-  background: rgba(239, 68, 68, 0.15);
-  color: rgba(239, 68, 68, 0.7);
+.mini-timer-btn.close-btn {
+  background: rgba(239, 68, 68, 0.12);
+  color: rgba(248, 113, 113, 0.85);
 }
 
-.mini-timer-btn.close:hover {
-  background: rgba(239, 68, 68, 0.3);
-  color: #ef4444;
+.mini-timer-btn.close-btn:hover {
+  background: rgba(239, 68, 68, 0.22);
+  color: #fca5a5;
 }
 
 @media (max-width: 480px) {
   .sticky-mini-timer {
+    bottom: 76px;
     left: 12px;
     right: 12px;
     transform: none;
     max-width: none;
     width: auto;
-    bottom: 68px;
   }
 
   .sticky-mini-timer.running {
-    animation: slideUpMiniTimerMobile 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards, pulseGlowMini 2.5s ease-in-out infinite;
+    animation: slideUpMiniTimerMobile 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards, pulseGlowMini 3s ease-in-out infinite;
+  }
+
+  .sticky-mini-timer.break-mode.running {
+    animation: slideUpMiniTimerMobile 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards, pulseGlowMiniBreak 3s ease-in-out infinite;
   }
 
   @keyframes slideUpMiniTimerMobile {
-    from { opacity: 0; transform: translateY(20px); }
+    from { opacity: 0; transform: translateY(24px); }
     to { opacity: 1; transform: translateY(0); }
   }
 }

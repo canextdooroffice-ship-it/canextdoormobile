@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Play, Pause, RotateCcw, X } from 'lucide-react';
+import { Play, Pause, RotateCcw, X, Timer } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import { loadFromSupabase, saveToSupabase } from './lib/syncProgress';
 import type { Session } from '@supabase/supabase-js';
@@ -754,35 +754,58 @@ function App() {
       {/* Sticky floating mini-timer — visible on all screens when timer is active */}
       {session && showStickyTimer && (
         <div className={`sticky-mini-timer ${timerRunning ? 'running' : 'paused'} ${timerType === 'break' ? 'break-mode' : ''}`}>
-          <div className="mini-timer-ring">
-            <svg width="36" height="36" viewBox="0 0 36 36">
-              <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="3" />
-              <circle
-                cx="18" cy="18" r="15" fill="none"
-                stroke={timerType === 'break' ? '#34d399' : '#c084fc'}
-                strokeWidth="3"
-                strokeLinecap="round"
-                strokeDasharray={94.2}
-                strokeDashoffset={94.2 - (94.2 * timerTimeLeft) / (parseInt(timerPreset, 10) * 60)}
-                transform="rotate(-90 18 18)"
-                style={{ transition: 'stroke-dashoffset 0.3s ease' }}
-              />
-            </svg>
-            <span className="mini-timer-countdown">{formatTimerDisplay(timerTimeLeft)}</span>
+          <div className="mini-timer-left">
+            <div className="mini-timer-ring">
+              <svg width="40" height="40" viewBox="0 0 40 40">
+                <circle cx="20" cy="20" r="17" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="3" />
+                <circle
+                  cx="20" cy="20" r="17" fill="none"
+                  stroke={timerType === 'break' ? '#10b981' : '#a855f7'}
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeDasharray={106.8}
+                  strokeDashoffset={106.8 - (106.8 * timerTimeLeft) / (parseInt(timerPreset, 10) * 60)}
+                  transform="rotate(-90 20 20)"
+                  style={{ transition: 'stroke-dashoffset 0.3s ease' }}
+                />
+              </svg>
+              <div className="mini-timer-icon-inner">
+                <Timer size={16} />
+              </div>
+            </div>
           </div>
-          <div className="mini-timer-info">
-            <span className="mini-timer-status">{timerStatusText}</span>
-            {timerStudyLabel && <span className="mini-timer-label">{timerStudyLabel}</span>}
+
+          <div className="mini-timer-center">
+            <span className="mini-timer-time">{formatTimerDisplay(timerTimeLeft)}</span>
+            <span className="mini-timer-subtitle">
+              {timerPreset} MIN {timerType === 'break' ? 'BREAK' : 'FOCUS'}
+            </span>
           </div>
+
           <div className="mini-timer-controls">
-            <button type="button" className="mini-timer-btn" onClick={handleTimerToggle}>
-              {timerRunning ? <Pause size={14} /> : <Play size={14} fill="currentColor" />}
+            <button 
+              type="button" 
+              className="mini-timer-btn control-btn" 
+              onClick={handleTimerToggle}
+              title={timerRunning ? 'Pause' : 'Start'}
+            >
+              {timerRunning ? <Pause size={16} /> : <Play size={16} fill="currentColor" />}
             </button>
-            <button type="button" className="mini-timer-btn" onClick={handleTimerReset}>
-              <RotateCcw size={13} />
+            <button 
+              type="button" 
+              className="mini-timer-btn reset-btn" 
+              onClick={handleTimerReset}
+              title="Reset"
+            >
+              <RotateCcw size={15} />
             </button>
-            <button type="button" className="mini-timer-btn close" onClick={() => { setTimerRunning(false); setTimerTimeLeft(parseInt(timerPreset, 10) * 60); }}>
-              <X size={13} />
+            <button 
+              type="button" 
+              className="mini-timer-btn close-btn" 
+              onClick={() => { setTimerRunning(false); setTimerTimeLeft(parseInt(timerPreset, 10) * 60); }}
+              title="Close"
+            >
+              <X size={15} />
             </button>
           </div>
         </div>
