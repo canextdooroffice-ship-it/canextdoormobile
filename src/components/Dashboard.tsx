@@ -187,22 +187,29 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const calendarDates = React.useMemo(() => {
     const dates = [];
     const today = new Date();
-    for (let i = -7; i <= 22; i++) {
-      const d = new Date(today);
-      d.setDate(today.getDate() + i);
-      
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const dateVal = String(d.getDate()).padStart(2, '0');
+    
+    // Start date: January 1, 2025 (noon to avoid DST issues)
+    const startDate = new Date(2025, 0, 1, 12, 0, 0);
+    
+    // End date: 3 months forward from today (noon)
+    const endDate = new Date(today.getFullYear(), today.getMonth() + 3, today.getDate(), 12, 0, 0);
+    
+    const curr = new Date(startDate);
+    while (curr <= endDate) {
+      const year = curr.getFullYear();
+      const month = String(curr.getMonth() + 1).padStart(2, '0');
+      const dateVal = String(curr.getDate()).padStart(2, '0');
       const dateStr = `${year}-${month}-${dateVal}`;
       
       dates.push({
         dateStr,
-        dayName: d.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase(),
-        dateNumber: d.getDate(),
-        month: d.toLocaleString('en-US', { month: 'short' }),
+        dayName: curr.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase(),
+        dateNumber: curr.getDate(),
+        month: curr.toLocaleString('en-US', { month: 'short' }),
         year
       });
+      
+      curr.setDate(curr.getDate() + 1);
     }
     return dates;
   }, []);
