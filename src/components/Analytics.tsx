@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { Target, Plus, Trash2, X, Calendar, Check, Layers, Search, BookOpen, AlertCircle } from 'lucide-react';
 import type { ProgressState } from './Subjects';
 import { SYLLABUS_DATA } from '../constants/syllabus';
@@ -651,7 +652,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
       </div>
 
       {/* LOG MISTAKE MODAL */}
-      {isLogModalOpen && (
+      {isLogModalOpen && createPortal(
         <div className="matrix-modal-overlay" onClick={() => setIsLogModalOpen(false)}>
           <div className="matrix-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="matrix-modal-header">
@@ -680,7 +681,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                     ))}
                   </select>
                 </div>
-
+ 
                 <div className="input-group">
                   <label>Chapter</label>
                   <select 
@@ -695,7 +696,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                   </select>
                 </div>
               </div>
-
+ 
               <div className="profile-form-grid mt-3">
                 <div className="input-group">
                   <label>Mistake Type</label>
@@ -712,7 +713,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                     <option value="Formula Error">Formula Error</option>
                   </select>
                 </div>
-
+ 
                 <div className="input-group">
                   <label>Severity</label>
                   <select
@@ -727,7 +728,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                   </select>
                 </div>
               </div>
-
+ 
               <div className="input-group mt-3">
                 <label>What I Did Wrong</label>
                 <textarea
@@ -739,7 +740,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                   required
                 />
               </div>
-
+ 
               <div className="input-group mt-3">
                 <label>Correct Approach</label>
                 <textarea
@@ -751,7 +752,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                   required
                 />
               </div>
-
+ 
               <div className="input-group mt-3">
                 <label>Root Cause (Self Reflection)</label>
                 <input
@@ -763,7 +764,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                   required
                 />
               </div>
-
+ 
               <div className="matrix-modal-actions mt-4">
                 <button type="submit" className="matrix-modal-save-btn">
                   Save Mistake Log
@@ -778,11 +779,12 @@ export const Analytics: React.FC<AnalyticsProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* DRILL DOWN MODAL */}
-      {isDrillDownOpen && (
+      {isDrillDownOpen && createPortal(
         <div className="matrix-modal-overlay" onClick={() => setIsDrillDownOpen(false)}>
           <div className="matrix-modal-card drilldown" onClick={(e) => e.stopPropagation()}>
             <div className="matrix-modal-header">
@@ -817,19 +819,19 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                             {m.severity || 'Medium (Warning)'}
                           </span>
                         </div>
-
+ 
                         <div className="drilldown-detail-section mt-1">
                           <span className="drilldown-section-title">WHAT I DID WRONG:</span>
                           <p className="drilldown-card-desc">{m.whatWrong || m.description || 'No description provided.'}</p>
                         </div>
-
+ 
                         {m.correctApproach && (
                           <div className="drilldown-detail-section mt-2">
                             <span className="drilldown-section-title">CORRECT APPROACH:</span>
                             <p className="drilldown-card-desc-success">{m.correctApproach}</p>
                           </div>
                         )}
-
+ 
                         {m.rootCause && (
                           <div className="drilldown-detail-section mt-2">
                             <span className="drilldown-section-title">ROOT CAUSE:</span>
@@ -850,7 +852,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                 </div>
               )}
             </div>
-
+ 
             <div className="matrix-modal-actions mt-3">
               <button 
                 type="button" 
@@ -861,11 +863,12 @@ export const Analytics: React.FC<AnalyticsProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ADD REVISION MODAL */}
-      {isAddRevisionModalOpen && (
+      {isAddRevisionModalOpen && createPortal(
         <div className="matrix-modal-overlay" onClick={() => setIsAddRevisionModalOpen(false)}>
           <div className="matrix-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="matrix-modal-header">
@@ -894,7 +897,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                     ))}
                   </select>
                 </div>
-
+ 
                 <div className="input-group">
                   <label>Chapter</label>
                   <select 
@@ -909,7 +912,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                   </select>
                 </div>
               </div>
-
+ 
               <div className="profile-form-grid mt-3">
                 <div className="input-group">
                   <label>Requirement</label>
@@ -924,7 +927,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                     <option value="REV3">Revision 3 (REV3)</option>
                   </select>
                 </div>
-
+ 
                 <div className="input-group">
                   <label>Due Date</label>
                   <input
@@ -936,7 +939,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                   />
                 </div>
               </div>
-
+ 
               <div className="matrix-modal-actions mt-4">
                 <button type="submit" className="matrix-modal-save-btn">
                   Add to Queue
@@ -951,7 +954,8 @@ export const Analytics: React.FC<AnalyticsProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

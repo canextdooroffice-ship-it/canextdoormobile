@@ -6525,3 +6525,22 @@ body {
     to { opacity: 1; transform: translateY(0); }
   }
 }
+
+/* Fix Analytics Modals on Mobile screen sizes to render as premium bottom sheets */
+@media (max-width: 480px) {
+  .matrix-modal-overlay {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+  
+  .matrix-modal-card {
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    border-top-left-radius: 24px !important;
+    border-top-right-radius: 24px !important;
+    max-width: 100% !important;
+    max-height: 82vh !important;
+    padding: 20px 20px calc(24px + env(safe-area-inset-bottom)) 20px !important;
+    box-shadow: 0 -10px 25px rgba(0, 0, 0, 0.08) !important;
+  }
+}
