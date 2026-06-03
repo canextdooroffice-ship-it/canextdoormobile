@@ -409,7 +409,7 @@ export const Subjects: React.FC<SubjectsProps> = ({
                 className="styled-task-input"
               />
             </div>
-            <button type="submit" className="action-button-primary mt-3 py-2 text-sm">
+            <button type="submit" className="action-button-primary mt-4">
               <span>Add Subject</span>
             </button>
           </form>
