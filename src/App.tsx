@@ -742,6 +742,7 @@ function App() {
                 studyTarget={studyTarget}
                 setStudyTarget={handleUpdateStudyTarget}
                 onLogout={handleLogout}
+                fullName={fullName}
                 onUpdateFullName={handleUpdateFullName}
                 examStartDate={examStartDate}
                 onUpdateExamStartDate={setExamStartDate}

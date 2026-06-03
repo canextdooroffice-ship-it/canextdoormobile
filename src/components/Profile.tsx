@@ -9,6 +9,7 @@ interface ProfileProps {
   studyTarget: number;
   setStudyTarget: (target: number) => void;
   onLogout: () => void;
+  fullName: string;
   onUpdateFullName: (name: string) => void;
   examStartDate: string;
   onUpdateExamStartDate: (date: string) => void;
@@ -19,6 +20,9 @@ export const Profile: React.FC<ProfileProps> = ({
   caLevel,
   setCaLevel,
   onLogout,
+  studyTarget: studyTargetProp,
+  setStudyTarget,
+  fullName: fullNameProp,
   onUpdateFullName,
   examStartDate: examStartDateProp,
   onUpdateExamStartDate,
@@ -32,7 +36,11 @@ export const Profile: React.FC<ProfileProps> = ({
     }
   };
 
-  const [fullName, setFullName] = React.useState(() => getStoredValue('cand_fullName', ''));
+  const [fullName, setFullName] = React.useState(() => fullNameProp || getStoredValue('cand_fullName', ''));
+  const [studyTarget, setLocalStudyTarget] = React.useState(() => {
+    const val = getStoredValue('cand_studyTarget', '');
+    return val ? parseInt(val, 10) : studyTargetProp;
+  });
   const [courseLevel, setCourseLevel] = React.useState(() => getStoredValue('cand_courseLevel', caLevel));
   const [preparingFor, setPreparingFor] = React.useState<'Group 1' | 'Group 2' | 'Both Groups'>(
     () => getStoredValue('cand_preparingFor', 'Both Groups') as 'Group 1' | 'Group 2' | 'Both Groups'
@@ -50,6 +58,24 @@ export const Profile: React.FC<ProfileProps> = ({
     setCourseLevel(caLevel);
   }
 
+  const [prevExamStartDate, setPrevExamStartDate] = React.useState(examStartDateProp);
+  if (examStartDateProp !== prevExamStartDate) {
+    setPrevExamStartDate(examStartDateProp);
+    setExamStartDate(examStartDateProp || '');
+  }
+
+  const [prevFullName, setPrevFullName] = React.useState(fullNameProp);
+  if (fullNameProp !== prevFullName) {
+    setPrevFullName(fullNameProp);
+    setFullName(fullNameProp || '');
+  }
+
+  const [prevStudyTarget, setPrevStudyTarget] = React.useState(studyTargetProp);
+  if (studyTargetProp !== prevStudyTarget) {
+    setPrevStudyTarget(studyTargetProp);
+    setLocalStudyTarget(studyTargetProp);
+  }
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -58,6 +84,7 @@ export const Profile: React.FC<ProfileProps> = ({
       localStorage.setItem('cand_preparingFor', preparingFor);
       localStorage.setItem('cand_attemptMonthYear', attemptMonthYear);
       localStorage.setItem('cand_examStartDate', examStartDate);
+      localStorage.setItem('cand_studyTarget', studyTarget.toString());
 
       localStorage.setItem('cand_articleshipStartDate', articleshipStartDate);
       localStorage.setItem('cand_allowedLeaves', allowedLeaves.toString());
@@ -67,6 +94,7 @@ export const Profile: React.FC<ProfileProps> = ({
       setCaLevel(courseLevel);
       onUpdateFullName(fullName);
       onUpdateExamStartDate(examStartDate);
+      setStudyTarget(studyTarget);
 
       alert('Profile updated successfully! ✨');
     } catch (err) {
@@ -76,15 +104,16 @@ export const Profile: React.FC<ProfileProps> = ({
   };
 
   const handleCancel = () => {
-    setFullName(getStoredValue('cand_fullName', 'Chitransh Agrawal'));
+    setFullName(getStoredValue('cand_fullName', fullNameProp || ''));
+    setLocalStudyTarget(parseInt(getStoredValue('cand_studyTarget', studyTargetProp.toString()), 10));
     setCourseLevel(getStoredValue('cand_courseLevel', caLevel));
     setPreparingFor(getStoredValue('cand_preparingFor', 'Both Groups') as 'Group 1' | 'Group 2' | 'Both Groups');
-    setAttemptMonthYear(getStoredValue('cand_attemptMonthYear', 'May 2026'));
-    setExamStartDate(getStoredValue('cand_examStartDate', '2026-05-02'));
+    setAttemptMonthYear(getStoredValue('cand_attemptMonthYear', ''));
+    setExamStartDate(getStoredValue('cand_examStartDate', examStartDateProp || ''));
 
-    setArticleshipStartDate(getStoredValue('cand_articleshipStartDate', '2023-02-10'));
-    setAllowedLeaves(parseInt(getStoredValue('cand_allowedLeaves', '156'), 10));
-    setLeavesTaken(parseInt(getStoredValue('cand_leavesTaken', '156'), 10));
+    setArticleshipStartDate(getStoredValue('cand_articleshipStartDate', ''));
+    setAllowedLeaves(parseInt(getStoredValue('cand_allowedLeaves', '0'), 10));
+    setLeavesTaken(parseInt(getStoredValue('cand_leavesTaken', '0'), 10));
     alert('Changes reverted.');
   };
 
@@ -229,6 +258,19 @@ export const Profile: React.FC<ProfileProps> = ({
                 />
                 <Calendar size={14} className="date-field-icon" />
               </div>
+            </div>
+
+            <div className="input-group">
+              <label>Daily Study Target (Hours)</label>
+              <input 
+                type="number" 
+                value={studyTarget} 
+                onChange={(e) => setLocalStudyTarget(Math.max(1, Math.min(24, parseInt(e.target.value, 10) || 0)))}
+                className="styled-text-input-field" 
+                min="1"
+                max="24"
+                required
+              />
             </div>
           </div>
         </div>
