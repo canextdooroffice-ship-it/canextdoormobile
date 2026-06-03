@@ -617,6 +617,7 @@ function App() {
                 caLevel={caLevel}
                 tasks={tasks}
                 setTasks={setTasks}
+                todayHours={todayHours}
               />
             )}
             {activeTab === 'analytics' && (

@@ -14,9 +14,10 @@ interface PlannerProps {
   caLevel: string;
   tasks: Task[];
   setTasks: React.Dispatch<React.SetStateAction<Task[]>>;
+  todayHours: number;
 }
 
-export const Planner: React.FC<PlannerProps> = ({ onAddStudyHours, caLevel, tasks, setTasks }) => {
+export const Planner: React.FC<PlannerProps> = ({ onAddStudyHours, caLevel, tasks, setTasks, todayHours }) => {
   const [plannerTab, setPlannerTab] = useState<'tasks' | 'timer'>('tasks');
 
   // --- Task State ---
@@ -90,14 +91,8 @@ export const Planner: React.FC<PlannerProps> = ({ onAddStudyHours, caLevel, task
   const [wakeTime, setWakeTime] = useState(() => localStorage.getItem('cand_wakeTime') || '');
   const [sleepTime, setSleepTime] = useState(() => localStorage.getItem('cand_sleepTime') || '');
   
-  const [todayFocusHours, setTodayFocusHours] = useState<number>(() => {
-    try {
-      const stored = localStorage.getItem('cand_todayFocusHours');
-      return stored ? parseFloat(stored) : 0;
-    } catch {
-      return 0;
-    }
-  });
+  // Use the prop-based todayHours instead of local state
+  const todayFocusHours = todayHours;
 
   const showLocalNotification = (title: string, body: string) => {
     if (!('Notification' in window)) return;
@@ -143,7 +138,6 @@ export const Planner: React.FC<PlannerProps> = ({ onAddStudyHours, caLevel, task
             if (timerType === 'focus') {
               const hoursLogged = selectedPreset === '50' ? 0.8 : 0.4;
               onAddStudyHours(hoursLogged);
-              setTodayFocusHours(prevVal => parseFloat((prevVal + hoursLogged).toFixed(1)));
               
               showLocalNotification(
                 'Focus Session Complete! 🎯',
@@ -212,9 +206,7 @@ export const Planner: React.FC<PlannerProps> = ({ onAddStudyHours, caLevel, task
     localStorage.setItem('cand_sleepTime', sleepTime);
   }, [wakeTime, sleepTime]);
 
-  useEffect(() => {
-    localStorage.setItem('cand_todayFocusHours', todayFocusHours.toString());
-  }, [todayFocusHours]);
+
 
   const calculateSleepDuration = (sleep: string, wake: string): number => {
     if (!sleep || !wake) return 0;
@@ -300,7 +292,6 @@ export const Planner: React.FC<PlannerProps> = ({ onAddStudyHours, caLevel, task
       return;
     }
     onAddStudyHours(hrs);
-    setTodayFocusHours(prev => parseFloat((prev + hrs).toFixed(1)));
     alert(`Successfully logged ${hrs} hours of ${selectedSubject} (${selectedChapter || 'General'}) - ${selectedPhase}!`);
     setStartTime('');
     setEndTime('');
