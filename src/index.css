@@ -795,6 +795,13 @@ body {
   flex: 0 0 80px;
 }
 
+@media (max-width: 480px) {
+  .form-row {
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
 .styled-select, .styled-num-input {
   background-color: var(--bg-card);
   border: 1px solid #cbd5e1;
@@ -4419,6 +4426,13 @@ body {
 
 .cycle-form-row .input-group {
   flex: 1;
+}
+
+@media (max-width: 480px) {
+  .cycle-form-row {
+    flex-direction: column;
+    gap: 12px;
+  }
 }
 
 .sync-cycle-btn {

@@ -527,7 +527,8 @@ export const Planner: React.FC<PlannerProps> = ({ onAddStudyHours, caLevel }) =>
             <span className="section-title-lbl">MANUAL LOG ADDITION</span>
             <div className="manual-log-card">
               <form onSubmit={handleAddSessionBlock} className="manual-log-form">
-                <div className="form-group mb-3">
+                <div className="input-group mb-3">
+                  <label>SUBJECT</label>
                   <select 
                     value={selectedSubject} 
                     onChange={(e) => setSelectedSubject(e.target.value)}
@@ -543,6 +544,7 @@ export const Planner: React.FC<PlannerProps> = ({ onAddStudyHours, caLevel }) =>
                 
                 <div className="form-row mb-3">
                   <div className="input-group flex-1">
+                    <label>CHAPTER</label>
                     <select 
                       value={selectedChapter} 
                       onChange={(e) => setSelectedChapter(e.target.value)}
@@ -555,6 +557,7 @@ export const Planner: React.FC<PlannerProps> = ({ onAddStudyHours, caLevel }) =>
                     </select>
                   </div>
                   <div className="input-group flex-1">
+                    <label>STUDY PHASE</label>
                     <select 
                       value={selectedPhase} 
                       onChange={(e) => setSelectedPhase(e.target.value)}
