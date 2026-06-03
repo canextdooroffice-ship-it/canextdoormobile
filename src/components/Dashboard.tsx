@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { Flame, Calendar, Target, Timer, Check, Trash2, X, Clock } from 'lucide-react';
 import { SYLLABUS_DATA } from '../constants/syllabus';
 import type { ProgressState } from './Subjects';
@@ -453,7 +454,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       {/* Weekly Timetable Modal */}
-      {isTimetableModalOpen && (
+      {isTimetableModalOpen && createPortal(
         <div className="timetable-modal-overlay" onClick={() => setIsTimetableModalOpen(false)}>
           <div className="timetable-modal" onClick={(e) => e.stopPropagation()}>
             <div className="timetable-modal-header">
@@ -514,11 +515,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
               })}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Add Slot From Modal Dialog */}
-      {isAddingSlotFromModal && (
+      {isAddingSlotFromModal && createPortal(
         <div className="timetable-modal-overlay modal-sub" onClick={() => setIsAddingSlotFromModal(false)}>
           <div className="timetable-sub-modal" onClick={(e) => e.stopPropagation()}>
             <div className="timetable-modal-header">
@@ -574,7 +576,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

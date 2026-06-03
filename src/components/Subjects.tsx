@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, ChevronUp, Trash2, Plus, Search, Filter, Play, Sparkles, Check, CheckCircle, Bold, Italic, Underline, List, Highlighter, Palette } from 'lucide-react';
 import { SYLLABUS_DATA } from '../constants/syllabus';
 
@@ -626,7 +627,7 @@ export const Subjects: React.FC<SubjectsProps> = ({
         })}
       </div>
 
-      {editingVideo && (
+      {editingVideo && createPortal(
         <div className="modal-overlay fade-in" onClick={() => setEditingVideo(null)}>
           <div className="modal-content slide-up" onClick={(e) => e.stopPropagation()}>
             <h3 className="modal-title">Lecture Video URL</h3>
@@ -657,7 +658,7 @@ export const Subjects: React.FC<SubjectsProps> = ({
                       
                       if (!finalUrl.includes('youtube.com') && !finalUrl.includes('youtu.be')) {
                         if (/^[a-zA-Z0-9_-]{11}$/.test(finalUrl)) {
-                          finalUrl = `https://www.youtube.com/watch?v=${finalUrl}`;
+                           finalUrl = `https://www.youtube.com/watch?v=${finalUrl}`;
                         }
                       }
                       
@@ -691,10 +692,11 @@ export const Subjects: React.FC<SubjectsProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {activeLdrNote && (
+      {activeLdrNote && createPortal(
         <div className="notepad-page fade-in">
           {/* Header */}
           <div className="notepad-header">
@@ -817,7 +819,8 @@ export const Subjects: React.FC<SubjectsProps> = ({
               {...({ placeholder: "Write your Last Day Revision (LDR) notes here... e.g. key formulas, adjustments to check, or critical questions." } as any)}
             />
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
