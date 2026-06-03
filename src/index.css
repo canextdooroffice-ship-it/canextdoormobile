@@ -3363,7 +3363,9 @@ body {
 
 .calendar-timeline-scroll {
   flex: 1;
+  min-height: 0; /* Fix flexbox vertical scroll bug */
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch; /* Smooth momentum scroll on iOS */
   position: relative;
   background-color: white;
   padding-bottom: 80px; /* space to scroll past the FAB */

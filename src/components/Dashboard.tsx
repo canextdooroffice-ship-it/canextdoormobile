@@ -141,8 +141,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
     id: string;
     day: string; // 'MONDAY', 'TUESDAY', etc.
     subject: string;
+    chapter?: string;
     timeStart: string; // e.g. '09:00'
     timeEnd: string; // e.g. '11:00'
+    isCustomRange?: boolean;
+    dateFrom?: string;
+    dateTo?: string;
   }
 
   const todayDayName = React.useMemo(() => {
@@ -170,9 +174,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [isAddingSlotFromModal, setIsAddingSlotFromModal] = React.useState(false);
   
   const [newSlotSubject, setNewSlotSubject] = React.useState('');
+  const [newSlotChapter, setNewSlotChapter] = React.useState('');
   const [newSlotTimeStart, setNewSlotTimeStart] = React.useState('09:00');
   const [newSlotTimeEnd, setNewSlotTimeEnd] = React.useState('11:00');
   const [newSlotDay, setNewSlotDay] = React.useState('MONDAY');
+  const [newSlotIsCustomRange, setNewSlotIsCustomRange] = React.useState(false);
+  const [newSlotDateFrom, setNewSlotDateFrom] = React.useState('');
+  const [newSlotDateTo, setNewSlotDateTo] = React.useState('');
   
   const todayDateStr = React.useMemo(() => {
     const today = new Date();
@@ -265,9 +273,23 @@ export const Dashboard: React.FC<DashboardProps> = ({
     return colors[index % colors.length] || '#6366F1';
   };
 
+  const handleSubjectChange = (val: string) => {
+    setNewSlotSubject(val);
+    const chapters = val ? getSubjectChapters(val) : [];
+    setNewSlotChapter(chapters[0] || '');
+  };
+
   const todaySlots = React.useMemo(() => {
-    return slots.filter(s => s.day === todayDayName).sort((a, b) => a.timeStart.localeCompare(b.timeStart));
-  }, [slots, todayDayName]);
+    return slots
+      .filter(s => {
+        if (s.day !== todayDayName) return false;
+        if (s.isCustomRange) {
+          return !!(s.dateFrom && s.dateTo && todayDateStr >= s.dateFrom && todayDateStr <= s.dateTo);
+        }
+        return true;
+      })
+      .sort((a, b) => a.timeStart.localeCompare(b.timeStart));
+  }, [slots, todayDayName, todayDateStr]);
 
   const handleSaveSlot = (e: React.FormEvent) => {
     e.preventDefault();
@@ -276,8 +298,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
       id: Date.now().toString(),
       day: todayDayName,
       subject: newSlotSubject,
+      chapter: newSlotChapter || undefined,
       timeStart: newSlotTimeStart,
       timeEnd: newSlotTimeEnd,
+      isCustomRange: newSlotIsCustomRange,
+      dateFrom: newSlotIsCustomRange ? newSlotDateFrom : undefined,
+      dateTo: newSlotIsCustomRange ? newSlotDateTo : undefined,
     };
     setSlots(prev => [...prev, newSlot]);
     setIsAddingSlot(false);
@@ -290,8 +316,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
       id: Date.now().toString(),
       day: newSlotDay,
       subject: newSlotSubject,
+      chapter: newSlotChapter || undefined,
       timeStart: newSlotTimeStart,
       timeEnd: newSlotTimeEnd,
+      isCustomRange: newSlotIsCustomRange,
+      dateFrom: newSlotIsCustomRange ? newSlotDateFrom : undefined,
+      dateTo: newSlotIsCustomRange ? newSlotDateTo : undefined,
     };
     setSlots(prev => [...prev, newSlot]);
     setIsAddingSlotFromModal(false);
@@ -445,13 +475,27 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <label>Subject</label>
                 <select 
                   value={newSlotSubject} 
-                  onChange={(e) => setNewSlotSubject(e.target.value)}
+                  onChange={(e) => handleSubjectChange(e.target.value)}
                   className="styled-select"
                   required
                 >
                   <option value="">Select Subject</option>
                   {subjectsList.map((sub, idx) => (
                     <option key={idx} value={sub}>{sub}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Chapter</label>
+                <select 
+                  value={newSlotChapter} 
+                  onChange={(e) => setNewSlotChapter(e.target.value)}
+                  className="styled-select"
+                  required
+                >
+                  <option value="">Select Chapter</option>
+                  {getSubjectChapters(newSlotSubject).map((chap, idx) => (
+                    <option key={idx} value={chap}>{chap}</option>
                   ))}
                 </select>
               </div>
@@ -477,6 +521,45 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   />
                 </div>
               </div>
+
+              <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px', marginBottom: '8px' }}>
+                <input 
+                  type="checkbox" 
+                  id="inline-is-custom-range"
+                  checked={newSlotIsCustomRange}
+                  onChange={(e) => setNewSlotIsCustomRange(e.target.checked)}
+                  style={{ width: 'auto', margin: 0, accentColor: 'var(--accent-primary)' }}
+                />
+                <label htmlFor="inline-is-custom-range" style={{ margin: 0, fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', cursor: 'pointer' }}>Set repeating date range</label>
+              </div>
+
+              {newSlotIsCustomRange && (
+                <div className="form-time-row" style={{ marginBottom: '8px' }}>
+                  <div className="form-group">
+                    <label>From Date</label>
+                    <input 
+                      type="date" 
+                      value={newSlotDateFrom} 
+                      onChange={(e) => setNewSlotDateFrom(e.target.value)}
+                      className="styled-time-input"
+                      style={{ fontSize: '11px', padding: '6px 8px' }}
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>To Date</label>
+                    <input 
+                      type="date" 
+                      value={newSlotDateTo} 
+                      onChange={(e) => setNewSlotDateTo(e.target.value)}
+                      className="styled-time-input"
+                      style={{ fontSize: '11px', padding: '6px 8px' }}
+                      required
+                    />
+                  </div>
+                </div>
+              )}
+
               <div className="form-actions">
                 <button type="submit" className="form-save-btn">Save</button>
                 <button type="button" onClick={() => setIsAddingSlot(false)} className="form-cancel-btn">Cancel</button>
@@ -490,7 +573,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 type="button" 
                 className="schedule-add-slot-btn"
                 onClick={() => {
-                  setNewSlotSubject(subjectsList[0] || '');
+                  const defaultSub = subjectsList[0] || '';
+                  setNewSlotSubject(defaultSub);
+                  const chapters = defaultSub ? getSubjectChapters(defaultSub) : [];
+                  setNewSlotChapter(chapters[0] || '');
+                  setNewSlotIsCustomRange(false);
+                  setNewSlotDateFrom(todayDateStr);
+                  
+                  const d = new Date();
+                  d.setMonth(d.getMonth() + 3);
+                  const yr = d.getFullYear();
+                  const mo = String(d.getMonth() + 1).padStart(2, '0');
+                  const dy = String(d.getDate()).padStart(2, '0');
+                  setNewSlotDateTo(`${yr}-${mo}-${dy}`);
+                  
                   setIsAddingSlot(true);
                 }}
               >
@@ -504,9 +600,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   <div className="slot-accent-bar" />
                   <div className="slot-info">
                     <span className="slot-subject">{slot.subject}</span>
-                    <span className="slot-time">
+                    {slot.chapter && <span className="slot-chapter" style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '2px' }}>{slot.chapter}</span>}
+                    <span className="slot-time" style={{ marginTop: '4px' }}>
                       <Clock size={10} className="slot-time-icon" />
                       {formatTime12h(slot.timeStart)} - {formatTime12h(slot.timeEnd)}
+                      {slot.isCustomRange && (
+                        <span style={{ marginLeft: '8px', fontSize: '10px', color: 'var(--accent-primary)', fontWeight: 600 }}>
+                          🗓️ {new Date(slot.dateFrom!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {new Date(slot.dateTo!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </span>
+                      )}
                     </span>
                   </div>
                   <button 
@@ -522,7 +624,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 type="button" 
                 className="schedule-add-more-btn"
                 onClick={() => {
-                  setNewSlotSubject(subjectsList[0] || '');
+                  const defaultSub = subjectsList[0] || '';
+                  setNewSlotSubject(defaultSub);
+                  const chapters = defaultSub ? getSubjectChapters(defaultSub) : [];
+                  setNewSlotChapter(chapters[0] || '');
+                  setNewSlotIsCustomRange(false);
+                  setNewSlotDateFrom(todayDateStr);
+                  
+                  const d = new Date();
+                  d.setMonth(d.getMonth() + 3);
+                  const yr = d.getFullYear();
+                  const mo = String(d.getMonth() + 1).padStart(2, '0');
+                  const dy = String(d.getDate()).padStart(2, '0');
+                  setNewSlotDateTo(`${yr}-${mo}-${dy}`);
+                  
                   setIsAddingSlot(true);
                 }}
               >
@@ -596,7 +711,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 
                 {/* Floating absolute positioned events for activeDay */}
                 {slots
-                  .filter((s) => s.day === activeDay)
+                  .filter((s) => {
+                    if (s.day !== activeDay) return false;
+                    if (s.isCustomRange) {
+                      return !!(s.dateFrom && s.dateTo && activeDateStr >= s.dateFrom && activeDateStr <= s.dateTo);
+                    }
+                    return true;
+                  })
                   .map((slot) => {
                     const startMins = parseTimeToMinutes(slot.timeStart);
                     const endMins = parseTimeToMinutes(slot.timeEnd);
@@ -620,9 +741,19 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       >
                         <div className="calendar-event-info">
                           <span className="calendar-event-subject" style={{ color: color }}>{slot.subject}</span>
+                          {slot.chapter && (
+                            <span className="calendar-event-chapter" style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginTop: '2px' }}>
+                              {slot.chapter}
+                            </span>
+                          )}
                           <span className="calendar-event-time">
                             {formatTime12h(slot.timeStart)} - {formatTime12h(slot.timeEnd)}
                           </span>
+                          {slot.isCustomRange && (
+                            <span className="calendar-event-range" style={{ fontSize: '9px', opacity: 0.8, display: 'block', marginTop: '2px', color: 'var(--accent-primary)', fontWeight: 600 }}>
+                              🗓️ {new Date(slot.dateFrom!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {new Date(slot.dateTo!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </span>
+                          )}
                         </div>
                         <button 
                           type="button" 
@@ -637,7 +768,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   })}
                   
                 {/* Empty State */}
-                {slots.filter((s) => s.day === activeDay).length === 0 && (
+                {slots.filter((s) => {
+                  if (s.day !== activeDay) return false;
+                  if (s.isCustomRange) {
+                    return !!(s.dateFrom && s.dateTo && activeDateStr >= s.dateFrom && activeDateStr <= s.dateTo);
+                  }
+                  return true;
+                }).length === 0 && (
                   <div className="calendar-empty-state">
                     <Calendar size={32} className="text-muted" style={{ marginBottom: '8px' }} />
                     <p>No study slots scheduled for {activeDay.charAt(0) + activeDay.slice(1).toLowerCase()}.</p>
@@ -645,7 +782,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       type="button" 
                       onClick={() => {
                         setNewSlotDay(activeDay);
-                        setNewSlotSubject(subjectsList[0] || '');
+                        const defaultSub = subjectsList[0] || '';
+                        setNewSlotSubject(defaultSub);
+                        const chapters = defaultSub ? getSubjectChapters(defaultSub) : [];
+                        setNewSlotChapter(chapters[0] || '');
+                        setNewSlotIsCustomRange(false);
+                        setNewSlotDateFrom(activeDateStr);
+                        
+                        const d = new Date();
+                        d.setMonth(d.getMonth() + 3);
+                        const yr = d.getFullYear();
+                        const mo = String(d.getMonth() + 1).padStart(2, '0');
+                        const dy = String(d.getDate()).padStart(2, '0');
+                        setNewSlotDateTo(`${yr}-${mo}-${dy}`);
+                        
                         setIsAddingSlotFromModal(true);
                       }}
                       className="calendar-empty-add-btn"
@@ -658,13 +808,32 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
             
             {/* Floating Action Button (FAB) to Add Slot */}
-            {slots.filter((s) => s.day === activeDay).length > 0 && (
+            {slots.filter((s) => {
+              if (s.day !== activeDay) return false;
+              if (s.isCustomRange) {
+                return !!(s.dateFrom && s.dateTo && activeDateStr >= s.dateFrom && activeDateStr <= s.dateTo);
+              }
+              return true;
+            }).length > 0 && (
               <button
                 type="button"
                 className="calendar-fab"
                 onClick={() => {
                   setNewSlotDay(activeDay);
-                  setNewSlotSubject(subjectsList[0] || '');
+                  const defaultSub = subjectsList[0] || '';
+                  setNewSlotSubject(defaultSub);
+                  const chapters = defaultSub ? getSubjectChapters(defaultSub) : [];
+                  setNewSlotChapter(chapters[0] || '');
+                  setNewSlotIsCustomRange(false);
+                  setNewSlotDateFrom(activeDateStr);
+                  
+                  const d = new Date();
+                  d.setMonth(d.getMonth() + 3);
+                  const yr = d.getFullYear();
+                  const mo = String(d.getMonth() + 1).padStart(2, '0');
+                  const dy = String(d.getDate()).padStart(2, '0');
+                  setNewSlotDateTo(`${yr}-${mo}-${dy}`);
+                  
                   setIsAddingSlotFromModal(true);
                 }}
                 title="Add Schedule Slot"
@@ -696,13 +865,27 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <label>Subject</label>
                 <select 
                   value={newSlotSubject} 
-                  onChange={(e) => setNewSlotSubject(e.target.value)}
+                  onChange={(e) => handleSubjectChange(e.target.value)}
                   className="styled-select"
                   required
                 >
                   <option value="">Select Subject</option>
                   {subjectsList.map((sub, idx) => (
                     <option key={idx} value={sub}>{sub}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Chapter</label>
+                <select 
+                  value={newSlotChapter} 
+                  onChange={(e) => setNewSlotChapter(e.target.value)}
+                  className="styled-select"
+                  required
+                >
+                  <option value="">Select Chapter</option>
+                  {getSubjectChapters(newSlotSubject).map((chap, idx) => (
+                    <option key={idx} value={chap}>{chap}</option>
                   ))}
                 </select>
               </div>
@@ -728,6 +911,45 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   />
                 </div>
               </div>
+
+              <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px', marginBottom: '8px' }}>
+                <input 
+                  type="checkbox" 
+                  id="modal-is-custom-range"
+                  checked={newSlotIsCustomRange}
+                  onChange={(e) => setNewSlotIsCustomRange(e.target.checked)}
+                  style={{ width: 'auto', margin: 0, accentColor: 'var(--accent-primary)' }}
+                />
+                <label htmlFor="modal-is-custom-range" style={{ margin: 0, fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', cursor: 'pointer' }}>Set repeating date range</label>
+              </div>
+
+              {newSlotIsCustomRange && (
+                <div className="form-time-row" style={{ marginBottom: '8px' }}>
+                  <div className="form-group">
+                    <label>From Date</label>
+                    <input 
+                      type="date" 
+                      value={newSlotDateFrom} 
+                      onChange={(e) => setNewSlotDateFrom(e.target.value)}
+                      className="styled-time-input"
+                      style={{ fontSize: '11px', padding: '6px 8px' }}
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>To Date</label>
+                    <input 
+                      type="date" 
+                      value={newSlotDateTo} 
+                      onChange={(e) => setNewSlotDateTo(e.target.value)}
+                      className="styled-time-input"
+                      style={{ fontSize: '11px', padding: '6px 8px' }}
+                      required
+                    />
+                  </div>
+                </div>
+              )}
+
               <div className="form-actions">
                 <button type="submit" className="form-save-btn">Save</button>
                 <button type="button" onClick={() => setIsAddingSlotFromModal(false)} className="form-cancel-btn">Cancel</button>
