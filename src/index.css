@@ -3490,13 +3490,15 @@ body {
   background-color: white;
   border: 1px solid var(--border-color);
   border-radius: 16px;
-  padding: 10px 8px;
+  padding: 12px 6px;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  gap: 6px;
   box-shadow: var(--shadow-sm);
-  text-align: left;
-  min-width: 0; /* allows text truncation/shrinkage if needed */
+  text-align: center;
+  min-width: 0;
 }
 
 .task-stat-card.focus {
@@ -3506,9 +3508,9 @@ body {
 }
 
 .task-stat-icon-wrapper {
-  width: 30px;
-  height: 30px;
-  border-radius: 10px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3535,17 +3537,21 @@ body {
 .task-stat-details {
   display: flex;
   flex-direction: column;
+  align-items: center;
+  width: 100%;
   min-width: 0;
 }
 
 .task-stat-label {
-  font-size: 8px;
-  font-weight: 800;
+  font-size: 9px;
+  font-weight: 700;
   letter-spacing: 0.5px;
   color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  text-transform: uppercase;
+  text-align: center;
+  width: 100%;
+  margin-bottom: 2px;
+  word-break: break-word;
 }
 
 .task-stat-card.focus .task-stat-label {
@@ -3554,13 +3560,12 @@ body {
 
 .task-stat-value {
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
-  margin-top: 1px;
   color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  text-align: center;
+  width: 100%;
+  word-break: break-word;
 }
 
 .task-stat-card.focus .task-stat-value {
