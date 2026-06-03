@@ -755,32 +755,34 @@ function App() {
       {/* Sticky floating mini-timer — visible on all screens when timer is active */}
       {session && showStickyTimer && (
         <div className={`sticky-mini-timer ${timerRunning ? 'running' : 'paused'} ${timerType === 'break' ? 'break-mode' : ''}`}>
-          <div className="mini-timer-left">
-            <div className="mini-timer-ring">
-              <svg width="40" height="40" viewBox="0 0 40 40">
-                <circle cx="20" cy="20" r="17" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="3" />
-                <circle
-                  cx="20" cy="20" r="17" fill="none"
-                  stroke={timerType === 'break' ? '#10b981' : '#a855f7'}
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  strokeDasharray={106.8}
-                  strokeDashoffset={106.8 - (106.8 * timerTimeLeft) / (parseInt(timerPreset, 10) * 60)}
-                  transform="rotate(-90 20 20)"
-                  style={{ transition: 'stroke-dashoffset 0.3s ease' }}
-                />
-              </svg>
-              <div className="mini-timer-icon-inner">
-                <Timer size={16} />
+          <div className="mini-timer-content-group">
+            <div className="mini-timer-left">
+              <div className="mini-timer-ring">
+                <svg width="44" height="44" viewBox="0 0 44 44">
+                  <circle cx="22" cy="22" r="19" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3.5" />
+                  <circle
+                    cx="22" cy="22" r="19" fill="none"
+                    stroke={timerType === 'break' ? '#10b981' : '#a855f7'}
+                    strokeWidth="3.5"
+                    strokeLinecap="round"
+                    strokeDasharray={119.38}
+                    strokeDashoffset={119.38 - (119.38 * timerTimeLeft) / (parseInt(timerPreset, 10) * 60)}
+                    transform="rotate(-90 22 22)"
+                    style={{ transition: 'stroke-dashoffset 0.3s ease' }}
+                  />
+                </svg>
+                <div className="mini-timer-badge">
+                  <Timer size={10} className="mini-timer-badge-icon" />
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="mini-timer-center">
-            <span className="mini-timer-time">{formatTimerDisplay(timerTimeLeft)}</span>
-            <span className="mini-timer-subtitle">
-              {timerPreset} MIN {timerType === 'break' ? 'BREAK' : 'FOCUS'}
-            </span>
+            <div className="mini-timer-center">
+              <span className="mini-timer-time">{formatTimerDisplay(timerTimeLeft)}</span>
+              <span className="mini-timer-subtitle">
+                {timerPreset} MIN {timerType === 'break' ? 'BREAK' : 'FOCUS'}
+              </span>
+            </div>
           </div>
 
           <div className="mini-timer-controls">
@@ -790,7 +792,7 @@ function App() {
               onClick={handleTimerToggle}
               title={timerRunning ? 'Pause' : 'Start'}
             >
-              {timerRunning ? <Pause size={16} /> : <Play size={16} fill="currentColor" />}
+              {timerRunning ? <Pause size={18} /> : <Play size={18} fill="currentColor" />}
             </button>
             <button 
               type="button" 
@@ -798,7 +800,7 @@ function App() {
               onClick={handleTimerReset}
               title="Reset"
             >
-              <RotateCcw size={15} />
+              <RotateCcw size={16} />
             </button>
             <button 
               type="button" 
@@ -806,7 +808,7 @@ function App() {
               onClick={() => { setTimerRunning(false); setTimerTimeLeft(parseInt(timerPreset, 10) * 60); }}
               title="Close"
             >
-              <X size={15} />
+              <X size={16} />
             </button>
           </div>
         </div>
