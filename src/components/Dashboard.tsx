@@ -23,6 +23,8 @@ interface DashboardProps {
   caLevel: string;
   studyTarget: number; // e.g. 6 hours
   totalHours: number;
+  todayHours: number;
+  examStartDate: string;
   onStartSession: () => void;
   progressState: ProgressState;
   slots: ScheduleSlot[];
@@ -34,17 +36,33 @@ export const Dashboard: React.FC<DashboardProps> = ({
   userFullName,
   caLevel,
   studyTarget,
-  totalHours,
+  totalHours: _totalHours,
+  todayHours,
+  examStartDate,
   progressState,
   slots,
   setSlots,
 }) => {
   // Extract user alias from real name or email fallback
   const userAlias = userFullName || (userEmail ? userEmail.split('@')[0] : 'Student');
-  
-  // Calculate today's logged study hours dynamically based on totalHours
-  // totalHours starts at 14.5, todayLogged starts at 3.5. Let's compute difference!
-  const todayLogged = Math.max(0, parseFloat((totalHours - 11.0).toFixed(1)));
+
+  // Calculate days left until exam
+  const daysLeft = React.useMemo(() => {
+    if (!examStartDate) return null;
+    const exam = new Date(examStartDate);
+    if (isNaN(exam.getTime())) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    exam.setHours(0, 0, 0, 0);
+    return Math.ceil((exam.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  }, [examStartDate]);
+
+  // Deadline progress bar (% of time elapsed from today to exam, capped at 100)
+  const deadlineProgress = React.useMemo(() => {
+    if (daysLeft === null || daysLeft <= 0) return 100;
+    // Assume a ~180 day study window
+    return Math.min(100, Math.max(0, Math.round(((180 - daysLeft) / 180) * 100)));
+  }, [daysLeft]);
 
   // Dynamically compute subject progress ratios based on checklists
   const currentSyllabus = (SYLLABUS_DATA[caLevel as keyof typeof SYLLABUS_DATA] || SYLLABUS_DATA.Intermediate) as Record<string, string[]>;
@@ -105,7 +123,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   // Calculate overall average readiness percentage
   const totalSubjectsProgress = subjects.reduce((acc, sub) => acc + sub.progress, 0);
   const averageReadiness = subjects.length > 0 ? Math.round(totalSubjectsProgress / subjects.length) : 0;
-  const readinessVal = averageReadiness > 0 ? averageReadiness : 79.5;
+  const readinessVal = averageReadiness;
 
 
   // Local state for check-in and streak count
@@ -356,12 +374,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
           </div>
           <div className="kpi-value-row">
-            <span className="kpi-value">-30</span>
-            <span className="kpi-unit">days left</span>
+            <span className="kpi-value">{daysLeft !== null ? daysLeft : '—'}</span>
+            <span className="kpi-unit">{daysLeft !== null ? 'days left' : 'Set exam date'}</span>
           </div>
           <div className="kpi-footer">
             <div className="kpi-progress-bar-bg">
-              <div className="kpi-progress-bar-fill purple"></div>
+              <div className="kpi-progress-bar-fill purple" style={{ width: `${deadlineProgress}%` }}></div>
             </div>
           </div>
         </div>
@@ -428,14 +446,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
           </div>
           <div className="kpi-value-row">
-            <span className="kpi-value">{todayLogged.toFixed(1)}</span>
+            <span className="kpi-value">{todayHours.toFixed(1)}</span>
             <span className="kpi-unit">hours today</span>
           </div>
           <div className="kpi-footer">
             <div className="kpi-progress-bar-bg">
               <div 
                 className="kpi-progress-bar-fill cyan" 
-                style={{ width: `${Math.min(100, Math.round((todayLogged / studyTarget) * 100))}%` }}
+                style={{ width: `${Math.min(100, Math.round((todayHours / studyTarget) * 100))}%` }}
               />
             </div>
           </div>

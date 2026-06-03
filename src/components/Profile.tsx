@@ -10,6 +10,8 @@ interface ProfileProps {
   setStudyTarget: (target: number) => void;
   onLogout: () => void;
   onUpdateFullName: (name: string) => void;
+  examStartDate: string;
+  onUpdateExamStartDate: (date: string) => void;
 }
 
 export const Profile: React.FC<ProfileProps> = ({
@@ -18,6 +20,8 @@ export const Profile: React.FC<ProfileProps> = ({
   setCaLevel,
   onLogout,
   onUpdateFullName,
+  examStartDate: examStartDateProp,
+  onUpdateExamStartDate,
 }) => {
   // Load initial values from localStorage
   const getStoredValue = (key: string, fallback: string) => {
@@ -34,7 +38,7 @@ export const Profile: React.FC<ProfileProps> = ({
     () => getStoredValue('cand_preparingFor', 'Both Groups') as 'Group 1' | 'Group 2' | 'Both Groups'
   );
   const [attemptMonthYear, setAttemptMonthYear] = React.useState(() => getStoredValue('cand_attemptMonthYear', ''));
-  const [examStartDate, setExamStartDate] = React.useState(() => getStoredValue('cand_examStartDate', ''));
+  const [examStartDate, setExamStartDate] = React.useState(() => examStartDateProp || getStoredValue('cand_examStartDate', ''));
 
   const [articleshipStartDate, setArticleshipStartDate] = React.useState(() => getStoredValue('cand_articleshipStartDate', ''));
   const [allowedLeaves, setAllowedLeaves] = React.useState(() => parseInt(getStoredValue('cand_allowedLeaves', '0'), 10));
@@ -62,6 +66,7 @@ export const Profile: React.FC<ProfileProps> = ({
       // Sync level and name back to the app root
       setCaLevel(courseLevel);
       onUpdateFullName(fullName);
+      onUpdateExamStartDate(examStartDate);
 
       alert('Profile updated successfully! ✨');
     } catch (err) {

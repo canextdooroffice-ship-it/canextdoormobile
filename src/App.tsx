@@ -26,6 +26,9 @@ const LS_KEYS = {
   TASKS: 'cand_planner_tasks',
   REVISIONS: 'cand_revisions',
   MISTAKES: 'cand_mistakes',
+  EXAM_START_DATE: 'cand_examStartDate',
+  TODAY_HOURS: 'cand_todayHours',
+  TODAY_DATE_KEY: 'cand_todayDateKey',
 } as const;
 
 const loadFromStorage = <T,>(key: string, fallback: T): T => {
@@ -78,6 +81,17 @@ function App() {
     loadFromStorage<ProgressState>(LS_KEYS.PROGRESS, buildInitialProgress())
   );
   const [fullName, setFullName] = useState<string>(() => loadFromStorage(LS_KEYS.FULL_NAME, ''));
+  const [examStartDate, setExamStartDate] = useState<string>(() => loadFromStorage(LS_KEYS.EXAM_START_DATE, ''));
+
+  // Today's study hours (resets each day)
+  const [todayHours, setTodayHours] = useState<number>(() => {
+    const storedKey = loadFromStorage(LS_KEYS.TODAY_DATE_KEY, '');
+    const today = new Date().toISOString().split('T')[0];
+    if (storedKey === today) {
+      return loadFromStorage(LS_KEYS.TODAY_HOURS, 0);
+    }
+    return 0;
+  });
 
   // Lifted states
   const [slots, setSlots] = useState<ScheduleSlot[]>(() => loadFromStorage(LS_KEYS.SLOTS, []));
@@ -91,6 +105,11 @@ function App() {
   useEffect(() => { saveToStorage(LS_KEYS.STUDY_TARGET, studyTarget); }, [studyTarget]);
   useEffect(() => { saveToStorage(LS_KEYS.TOTAL_HOURS, totalHours); }, [totalHours]);
   useEffect(() => { saveToStorage(LS_KEYS.FULL_NAME, fullName); }, [fullName]);
+  useEffect(() => { saveToStorage(LS_KEYS.EXAM_START_DATE, examStartDate); }, [examStartDate]);
+  useEffect(() => {
+    saveToStorage(LS_KEYS.TODAY_HOURS, todayHours);
+    saveToStorage(LS_KEYS.TODAY_DATE_KEY, new Date().toISOString().split('T')[0]);
+  }, [todayHours]);
   useEffect(() => { saveToStorage(LS_KEYS.SLOTS, slots); }, [slots]);
   useEffect(() => { saveToStorage(LS_KEYS.TASKS, tasks); }, [tasks]);
   useEffect(() => { saveToStorage(LS_KEYS.REVISIONS, revisions); }, [revisions]);
@@ -101,10 +120,10 @@ function App() {
   const hasSyncedRef = useRef(false); // prevent double-load on mount
 
   // Ref to always hold the latest state values for loadCloudData callbacks without stale closure issues
-  const stateRef = useRef({ progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName });
+  const stateRef = useRef({ progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate });
   useEffect(() => {
-    stateRef.current = { progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName };
-  }, [progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName]);
+    stateRef.current = { progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate };
+  }, [progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate]);
 
   // Load cloud data on login (restores progress on new device)
   const loadCloudData = useCallback(async (userId: string) => {
@@ -125,6 +144,7 @@ function App() {
             mistakes?: Mistake[];
             slots?: ScheduleSlot[];
             fullName?: string;
+            examStartDate?: string;
           };
           setProgressState(packed.checklist || {});
           setTasks(packed.tasks || []);
@@ -132,6 +152,7 @@ function App() {
           setMistakes(packed.mistakes || []);
           setSlots(packed.slots || []);
           if (packed.fullName) setFullName(packed.fullName);
+          if (packed.examStartDate) setExamStartDate(packed.examStartDate);
         } else {
           // Old format (just progressState)
           setProgressState(cloudState || {});
@@ -142,7 +163,7 @@ function App() {
         console.log('Progress restored from cloud backup.');
       } else {
         // No cloud data yet → push current local state as first backup
-        const { progressState: ps, caLevel: cl, studyTarget: st, totalHours: th, slots: sl, tasks: tk, revisions: rv, mistakes: ms, fullName: fn } = stateRef.current;
+        const { progressState: ps, caLevel: cl, studyTarget: st, totalHours: th, slots: sl, tasks: tk, revisions: rv, mistakes: ms, fullName: fn, examStartDate: esd } = stateRef.current;
         
         // Pack state
         const packedProgress = {
@@ -151,7 +172,8 @@ function App() {
           revisions: rv,
           mistakes: ms,
           slots: sl,
-          fullName: fn
+          fullName: fn,
+          examStartDate: esd
         };
 
         await saveToSupabase(userId, {
@@ -181,7 +203,8 @@ function App() {
         revisions,
         mistakes,
         slots,
-        fullName
+        fullName,
+        examStartDate
       };
 
       saveToSupabase(userId, {
@@ -195,7 +218,7 @@ function App() {
     return () => {
       if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     };
-  }, [progressState, caLevel, studyTarget, totalHours, fullName, tasks, revisions, mistakes, slots, session]);
+  }, [progressState, caLevel, studyTarget, totalHours, fullName, examStartDate, tasks, revisions, mistakes, slots, session]);
 
 
 
@@ -351,8 +374,9 @@ function App() {
   };
 
   const handleAddStudyHours = (hours: number) => {
-    // Add logged study hours to session total
+    // Add logged study hours to session total and today's hours
     setTotalHours((prev) => parseFloat((prev + hours).toFixed(1)));
+    setTodayHours((prev) => parseFloat((prev + hours).toFixed(1)));
   };
 
   const handleToggleClass = (subName: string, chapName: string) => {
@@ -563,6 +587,8 @@ function App() {
                 caLevel={caLevel}
                 studyTarget={studyTarget}
                 totalHours={totalHours}
+                todayHours={todayHours}
+                examStartDate={examStartDate}
                 onStartSession={() => setActiveTab('planner')}
                 progressState={progressState}
                 slots={slots}
@@ -613,6 +639,8 @@ function App() {
                 setStudyTarget={handleUpdateStudyTarget}
                 onLogout={handleLogout}
                 onUpdateFullName={handleUpdateFullName}
+                examStartDate={examStartDate}
+                onUpdateExamStartDate={setExamStartDate}
               />
             )}
           </>
