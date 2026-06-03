@@ -1,6 +1,6 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Flame, Calendar, Target, Timer, Check, Trash2, X, Clock } from 'lucide-react';
+import { Flame, Calendar, Target, Timer, Check, Trash2, X, Clock, Plus } from 'lucide-react';
 import { SYLLABUS_DATA } from '../constants/syllabus';
 import type { ProgressState } from './Subjects';
 
@@ -173,8 +173,39 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [newSlotTimeStart, setNewSlotTimeStart] = React.useState('09:00');
   const [newSlotTimeEnd, setNewSlotTimeEnd] = React.useState('11:00');
   const [newSlotDay, setNewSlotDay] = React.useState('MONDAY');
+  
+  const [activeDay, setActiveDay] = React.useState<string>(() => {
+    return new Date().toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
+  });
+
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
+  
+  React.useEffect(() => {
+    if (isTimetableModalOpen && scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 420;
+    }
+  }, [isTimetableModalOpen]);
+
+  const HOURS = React.useMemo(() => Array.from({ length: 24 }, (_, i) => i), []);
+
+  const formatHourLabel = (hour: number) => {
+    if (hour === 0) return '12 AM';
+    if (hour === 12) return '12 PM';
+    return hour > 12 ? `${hour - 12} PM` : `${hour} AM`;
+  };
+
+  const parseTimeToMinutes = (timeStr: string) => {
+    if (!timeStr) return 0;
+    const [h, m] = timeStr.split(':').map(Number);
+    return h * 60 + m;
+  };
 
   const subjectsList = getAllSubjects();
+
+  const getSubjectColor = (subjectName: string) => {
+    const index = subjectsList.indexOf(subjectName);
+    return colors[index % colors.length] || '#6366F1';
+  };
 
   const todaySlots = React.useMemo(() => {
     return slots.filter(s => s.day === todayDayName).sort((a, b) => a.timeStart.localeCompare(b.timeStart));
@@ -456,8 +487,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {/* Weekly Timetable Modal */}
       {isTimetableModalOpen && createPortal(
         <div className="timetable-modal-overlay" onClick={() => setIsTimetableModalOpen(false)}>
-          <div className="timetable-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="timetable-modal-header">
+          <div className="timetable-modal" style={{ height: '85vh', maxHeight: '680px', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
+            {/* Modal Header */}
+            <div className="timetable-modal-header" style={{ padding: '20px 20px 10px 20px', borderBottom: 'none' }}>
               <div>
                 <h3 className="timetable-modal-title">Weekly Timetable</h3>
                 <p className="timetable-modal-subtitle">Manage slots for the entire week</p>
@@ -471,49 +503,118 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </button>
             </div>
             
-            <div className="timetable-modal-content">
+            {/* Google Calendar horizontal Day Selector strip */}
+            <div className="calendar-day-strip">
               {['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'].map((day) => {
-                const daySlots = slots.filter(s => s.day === day);
+                const isSelected = activeDay === day;
+                const isToday = day === todayDayName;
+                const shortName = day.slice(0, 3);
+                const initial = day[0];
                 return (
-                  <div key={day} className={`timetable-day-section ${day === todayDayName ? 'today' : ''}`}>
-                    <div className="day-header-row">
-                      <span className="day-name">{day.charAt(0) + day.slice(1).toLowerCase()}</span>
-                      {day === todayDayName && <span className="today-badge">Today</span>}
+                  <button
+                    key={day}
+                    type="button"
+                    className={`day-strip-btn ${isSelected ? 'active' : ''} ${isToday ? 'today' : ''}`}
+                    onClick={() => setActiveDay(day)}
+                  >
+                    <span className="day-strip-label">{shortName}</span>
+                    <div className="day-strip-circle">
+                      <span>{initial}</span>
                     </div>
-                    <div className="day-slots-container">
-                      {daySlots.length === 0 ? (
-                        <span className="day-no-slots">No slots scheduled</span>
-                      ) : (
-                        daySlots.map(s => (
-                          <div key={s.id} className="day-slot-pill">
-                            <span className="day-slot-subject">{s.subject}</span>
-                            <span className="day-slot-time">{formatTime12h(s.timeStart)} - {formatTime12h(s.timeEnd)}</span>
-                            <button 
-                              type="button" 
-                              className="day-slot-delete-btn"
-                              onClick={() => handleDeleteSlot(s.id)}
-                            >
-                              <X size={10} />
-                            </button>
-                          </div>
-                        ))
-                      )}
-                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Google Calendar Timeline View */}
+            <div className="calendar-timeline-scroll" ref={scrollContainerRef}>
+              <div className="calendar-timeline-relative">
+                {/* 24 Hour rows background grid */}
+                {HOURS.map((hour) => (
+                  <div key={hour} className="calendar-hour-row" style={{ height: '60px' }}>
+                    <span className="calendar-hour-label">{formatHourLabel(hour)}</span>
+                    <div className="calendar-hour-line" />
+                  </div>
+                ))}
+                
+                {/* Floating absolute positioned events for activeDay */}
+                {slots
+                  .filter((s) => s.day === activeDay)
+                  .map((slot) => {
+                    const startMins = parseTimeToMinutes(slot.timeStart);
+                    const endMins = parseTimeToMinutes(slot.timeEnd);
+                    let duration = endMins - startMins;
+                    if (duration <= 0) duration = 60; // fallback to 1h
+                    
+                    const top = startMins;
+                    const height = duration;
+                    const color = getSubjectColor(slot.subject);
+                    
+                    return (
+                      <div 
+                        key={slot.id} 
+                        className="calendar-event-card"
+                        style={{ 
+                          top: `${top}px`, 
+                          height: `${height}px`,
+                          borderLeftColor: color,
+                          backgroundColor: `${color}14`
+                        }}
+                      >
+                        <div className="calendar-event-info">
+                          <span className="calendar-event-subject" style={{ color: color }}>{slot.subject}</span>
+                          <span className="calendar-event-time">
+                            {formatTime12h(slot.timeStart)} - {formatTime12h(slot.timeEnd)}
+                          </span>
+                        </div>
+                        <button 
+                          type="button" 
+                          className="calendar-event-delete-btn"
+                          onClick={() => handleDeleteSlot(slot.id)}
+                          title="Delete Slot"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                  
+                {/* Empty State */}
+                {slots.filter((s) => s.day === activeDay).length === 0 && (
+                  <div className="calendar-empty-state">
+                    <Calendar size={32} className="text-muted" style={{ marginBottom: '8px' }} />
+                    <p>No study slots scheduled for {activeDay.charAt(0) + activeDay.slice(1).toLowerCase()}.</p>
                     <button 
                       type="button" 
-                      className="day-add-slot-inline-btn"
                       onClick={() => {
-                        setNewSlotDay(day);
+                        setNewSlotDay(activeDay);
                         setNewSlotSubject(subjectsList[0] || '');
                         setIsAddingSlotFromModal(true);
                       }}
+                      className="calendar-empty-add-btn"
                     >
                       + Add Slot
                     </button>
                   </div>
-                );
-              })}
+                )}
+              </div>
             </div>
+            
+            {/* Floating Action Button (FAB) to Add Slot */}
+            {slots.filter((s) => s.day === activeDay).length > 0 && (
+              <button
+                type="button"
+                className="calendar-fab"
+                onClick={() => {
+                  setNewSlotDay(activeDay);
+                  setNewSlotSubject(subjectsList[0] || '');
+                  setIsAddingSlotFromModal(true);
+                }}
+                title="Add Schedule Slot"
+              >
+                <Plus size={24} />
+              </button>
+            )}
           </div>
         </div>,
         document.body

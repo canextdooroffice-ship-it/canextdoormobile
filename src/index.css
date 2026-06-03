@@ -3298,6 +3298,238 @@ body {
   flex-direction: column;
 }
 
+/* Google Calendar View Styles for Timetable */
+.calendar-day-strip {
+  display: flex;
+  justify-content: space-around;
+  border-bottom: 1px solid var(--border-color);
+  padding: 10px 0;
+  background-color: var(--bg-secondary);
+}
+
+.day-strip-btn {
+  background: none;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  outline: none;
+  flex: 1;
+}
+
+.day-strip-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.day-strip-circle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+}
+
+.day-strip-btn.today .day-strip-circle {
+  border: 1.5px solid var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.day-strip-btn.active .day-strip-circle {
+  background-color: var(--accent-primary);
+  color: white !important;
+  box-shadow: 0 4px 10px rgba(99, 102, 241, 0.2);
+}
+
+.day-strip-btn.active .day-strip-label {
+  color: var(--accent-primary);
+}
+
+.calendar-timeline-scroll {
+  flex: 1;
+  overflow-y: auto;
+  position: relative;
+  background-color: white;
+  padding-bottom: 80px; /* space to scroll past the FAB */
+  scrollbar-width: none; /* Firefox */
+}
+
+.calendar-timeline-scroll::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
+}
+
+.calendar-timeline-relative {
+  position: relative;
+  height: 1440px; /* 24 hours * 60px */
+  width: 100%;
+}
+
+.calendar-hour-row {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.calendar-hour-label {
+  position: absolute;
+  left: 12px;
+  top: -8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  width: 44px;
+  text-align: right;
+}
+
+.calendar-hour-line {
+  height: 1px;
+  background-color: #f1f5f9;
+  margin-left: 64px; /* space for hour label */
+  position: relative;
+}
+
+.calendar-event-card {
+  position: absolute;
+  left: 76px;
+  right: 16px;
+  border-radius: 8px;
+  border-left: 4px solid var(--accent-primary);
+  padding: 6px 10px;
+  box-sizing: border-box;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+  transition: transform 0.15s ease;
+  min-height: 40px;
+  overflow: hidden;
+}
+
+.calendar-event-card:hover {
+  transform: scale(1.01);
+}
+
+.calendar-event-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  gap: 2px;
+  overflow: hidden;
+  height: 100%;
+  width: calc(100% - 16px);
+}
+
+.calendar-event-subject {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+.calendar-event-time {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.calendar-event-delete-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.2s ease, color 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border-radius: 4px;
+  margin-top: -2px;
+}
+
+.calendar-event-delete-btn:hover {
+  opacity: 1;
+  color: var(--accent-red);
+  background-color: rgba(239, 68, 68, 0.05);
+}
+
+/* Empty State */
+.calendar-empty-state {
+  position: absolute;
+  top: 150px;
+  left: 76px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  background-color: var(--bg-primary);
+  border: 1px dashed var(--border-color);
+  border-radius: 16px;
+  box-sizing: border-box;
+}
+
+.calendar-empty-state p {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  margin-bottom: 12px;
+}
+
+.calendar-empty-add-btn {
+  background-color: var(--accent-primary);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  padding: 6px 16px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.15);
+}
+
+/* Floating Action Button for Timetable */
+.calendar-fab {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  color: white;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3);
+  cursor: pointer;
+  z-index: 10;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.calendar-fab:hover {
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+}
+
 .timetable-sub-modal {
   background-color: white;
   border-radius: 20px;
