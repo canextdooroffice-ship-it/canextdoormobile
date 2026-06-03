@@ -624,6 +624,8 @@ function App() {
         [subName]: subject,
       };
     });
+    setRevisions((prev) => prev.filter((r) => !(r.subjectName === subName && r.chapterName === chapName)));
+    setMistakes((prev) => prev.filter((m) => !(m.subjectName === subName && m.chapterName === chapName)));
   };
 
   const handleAddSubject = (subName: string) => {
@@ -642,6 +644,8 @@ function App() {
       delete newState[subName];
       return newState;
     });
+    setRevisions((prev) => prev.filter((r) => r.subjectName !== subName));
+    setMistakes((prev) => prev.filter((m) => m.subjectName !== subName));
   };
 
   const handleSetVideoUrl = (subName: string, chapName: string, url: string) => {
@@ -760,6 +764,7 @@ function App() {
             )}
             {activeTab === 'analytics' && (
               <Analytics 
+                caLevel={caLevel}
                 totalHours={totalHours} 
                 progressState={progressState}
                 onToggleRevisionCycle={handleToggleRevisionCycle}

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Target, Plus, Trash2, X, Calendar, Check, Layers, Search, BookOpen, AlertCircle } from 'lucide-react';
 import type { ProgressState } from './Subjects';
+import { SYLLABUS_DATA } from '../constants/syllabus';
 
 export interface Mistake {
   id: string;
@@ -27,6 +28,7 @@ export interface RevisionItem {
 }
 
 interface AnalyticsProps {
+  caLevel: string;
   totalHours: number;
   progressState: ProgressState;
   onToggleRevisionCycle: (subName: string, chapName: string, cycle: number) => void;
@@ -57,6 +59,7 @@ const getSubjectBadge = (subjectName: string): string => {
 };
 
 export const Analytics: React.FC<AnalyticsProps> = ({ 
+  caLevel,
   progressState,
   onToggleRevisionCycle,
   revisions,
@@ -86,10 +89,28 @@ export const Analytics: React.FC<AnalyticsProps> = ({
   const [drillChapter, setDrillChapter] = React.useState('');
   const [drillCategory, setDrillCategory] = React.useState<'Conceptual' | 'Silly' | 'Misread' | 'Time' | 'Formula'>('Conceptual');
 
-  // List of active subjects and chapters
+  const currentSyllabus = React.useMemo(() => {
+    return (SYLLABUS_DATA[caLevel as keyof typeof SYLLABUS_DATA] || SYLLABUS_DATA.Intermediate) as Record<string, string[]>;
+  }, [caLevel]);
+
+  // List of active subjects and chapters (must belong to current level/custom and have at least 1 chapter)
   const activeSubjects = React.useMemo(() => {
-    return progressState ? Object.keys(progressState) : [];
-  }, [progressState]);
+    if (!progressState) return [];
+    const defaultSubs = Object.keys(currentSyllabus);
+    return Object.keys(progressState).filter((sub) => {
+      const isDefaultCurrent = defaultSubs.includes(sub);
+      const isDefaultAny = Object.values(SYLLABUS_DATA).some((levelSyllabus) =>
+        Object.keys(levelSyllabus).includes(sub)
+      );
+      const isCustom = !isDefaultAny;
+      const isActive = isDefaultCurrent || isCustom;
+      if (!isActive) return false;
+
+      // Ensure subject has at least one chapter in progressState
+      const chaps = progressState[sub] ? Object.keys(progressState[sub]) : [];
+      return chaps.length > 0;
+    });
+  }, [progressState, currentSyllabus]);
 
   const logChapters = React.useMemo(() => {
     if (!logSubject || !progressState || !progressState[logSubject]) return [];
@@ -173,6 +194,10 @@ export const Analytics: React.FC<AnalyticsProps> = ({
     const rowsMap = new Map<string, { subjectName: string; chapterName: string }>();
     
     mistakes.forEach((m) => {
+      // Filter out orphaned mistakes
+      if (!activeSubjects.includes(m.subjectName)) return;
+      if (!progressState[m.subjectName]?.[m.chapterName]) return;
+
       if (selectedSubjectFilter !== 'All' && m.subjectName !== selectedSubjectFilter) {
         return;
       }
@@ -183,7 +208,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
     });
 
     return Array.from(rowsMap.values());
-  }, [mistakes, selectedSubjectFilter]);
+  }, [mistakes, activeSubjects, progressState, selectedSubjectFilter]);
 
   // Mistakes for the active drill down
   const filteredDrillMistakes = React.useMemo(() => {
@@ -268,6 +293,10 @@ export const Analytics: React.FC<AnalyticsProps> = ({
 
     revisions.forEach((r) => {
       if (r.completed) return;
+      // Filter out orphaned revisions
+      if (!activeSubjects.includes(r.subjectName)) return;
+      if (!progressState[r.subjectName]?.[r.chapterName]) return;
+
       const diff = getDaysDiff(todayStr, r.dueDate);
       if (diff > 0) {
         late++;
@@ -279,11 +308,15 @@ export const Analytics: React.FC<AnalyticsProps> = ({
     });
 
     return { late, todayCount, upcoming };
-  }, [revisions, todayStr, getDaysDiff]);
+  }, [revisions, activeSubjects, progressState, todayStr, getDaysDiff]);
 
   const filteredRevisions = React.useMemo(() => {
     return revisions.filter((r) => {
       if (r.completed) return false;
+      // Filter out orphaned revisions
+      if (!activeSubjects.includes(r.subjectName)) return false;
+      if (!progressState[r.subjectName]?.[r.chapterName]) return false;
+
       if (revisionSubjectFilter !== 'All' && r.subjectName !== revisionSubjectFilter) {
         return false;
       }
@@ -302,7 +335,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
     }).sort((a, b) => {
       return a.dueDate.localeCompare(b.dueDate);
     });
-  }, [revisions, revisionSubjectFilter, revisionSearchQuery, activeQueueTab, todayStr, getDaysDiff]);
+  }, [revisions, activeSubjects, progressState, revisionSubjectFilter, revisionSearchQuery, activeQueueTab, todayStr, getDaysDiff]);
 
   const handleCompleteRevision = (id: string) => {
     const item = revisions.find((r) => r.id === id);
