@@ -420,7 +420,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         {/* Session Card */}
-        <div className="kpi-card">
+        <div className="kpi-card" onClick={onStartSession} style={{ cursor: 'pointer' }}>
           <div className="kpi-header-row">
             <div className="kpi-icon-wrapper cyan">
               <Timer size={18} />
