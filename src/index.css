@@ -6389,26 +6389,16 @@ body {
 }
 
 .sticky-mini-timer.running {
-  animation: slideUpMiniTimer 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards, pulseGlowMini 3s ease-in-out infinite;
+  animation: slideUpMiniTimer 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .sticky-mini-timer.break-mode.running {
-  animation: slideUpMiniTimer 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards, pulseGlowMiniBreak 3s ease-in-out infinite;
+  animation: slideUpMiniTimer 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @keyframes slideUpMiniTimer {
   from { opacity: 0; transform: translateX(-50%) translateY(24px); }
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
-}
-
-@keyframes pulseGlowMini {
-  0%, 100% { box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.04) inset; }
-  50% { box-shadow: 0 16px 48px rgba(168, 85, 247, 0.2), 0 0 24px rgba(168, 85, 247, 0.15), 0 0 0 1px rgba(168, 85, 247, 0.15) inset; }
-}
-
-@keyframes pulseGlowMiniBreak {
-  0%, 100% { box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.04) inset; }
-  50% { box-shadow: 0 16px 48px rgba(16, 185, 129, 0.2), 0 0 24px rgba(16, 185, 129, 0.15), 0 0 0 1px rgba(16, 185, 129, 0.15) inset; }
 }
 
 .mini-timer-content-group {
@@ -6525,13 +6515,7 @@ body {
     animation: slideUpMiniTimerMobile 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
 
-  .sticky-mini-timer.running {
-    animation: slideUpMiniTimerMobile 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards, pulseGlowMini 3s ease-in-out infinite;
-  }
 
-  .sticky-mini-timer.break-mode.running {
-    animation: slideUpMiniTimerMobile 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards, pulseGlowMiniBreak 3s ease-in-out infinite;
-  }
 
   @keyframes slideUpMiniTimerMobile {
     from { opacity: 0; transform: translateY(24px); }
