@@ -174,46 +174,68 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [newSlotTimeEnd, setNewSlotTimeEnd] = React.useState('11:00');
   const [newSlotDay, setNewSlotDay] = React.useState('MONDAY');
   
-  const [activeDay, setActiveDay] = React.useState<string>(() => {
-    return new Date().toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
-  });
+  const todayDateStr = React.useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const dateVal = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${dateVal}`;
+  }, []);
+
+  const [activeDateStr, setActiveDateStr] = React.useState<string>(todayDateStr);
+
+  const calendarDates = React.useMemo(() => {
+    const dates = [];
+    const today = new Date();
+    for (let i = -7; i <= 22; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const dateVal = String(d.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${dateVal}`;
+      
+      dates.push({
+        dateStr,
+        dayName: d.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase(),
+        dateNumber: d.getDate(),
+        month: d.toLocaleString('en-US', { month: 'short' }),
+        year
+      });
+    }
+    return dates;
+  }, []);
+
+  const activeDay = React.useMemo(() => {
+    const found = calendarDates.find(d => d.dateStr === activeDateStr);
+    return found ? found.dayName : new Date().toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
+  }, [activeDateStr, calendarDates]);
 
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
+  const dayStripRef = React.useRef<HTMLDivElement>(null);
   
   React.useEffect(() => {
-    if (isTimetableModalOpen && scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = 420;
+    if (isTimetableModalOpen) {
+      setTimeout(() => {
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = 420;
+        }
+        if (dayStripRef.current) {
+          const todayBtn = dayStripRef.current.querySelector('.day-strip-btn.today');
+          if (todayBtn) {
+            todayBtn.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'center' });
+          }
+        }
+      }, 50);
     }
   }, [isTimetableModalOpen]);
 
-  // Calculate current week's dates (Monday to Sunday) dynamically
-  const weekDates = React.useMemo(() => {
-    const today = new Date();
-    const dayOfWeek = today.getDay(); // 0 is Sunday, 1 is Monday, etc.
-    const distanceToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    const monday = new Date(today);
-    monday.setDate(today.getDate() - distanceToMonday);
-    
-    return Array.from({ length: 7 }, (_, idx) => {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + idx);
-      return {
-        dayName: ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'][idx],
-        dateNumber: d.getDate(),
-        month: d.toLocaleString('en-US', { month: 'short' })
-      };
-    });
-  }, []);
-
   const monthHeader = React.useMemo(() => {
-    if (weekDates.length === 0) return '';
-    const firstMonth = weekDates[0].month;
-    const lastMonth = weekDates[6].month;
-    if (firstMonth === lastMonth) {
-      return firstMonth;
-    }
-    return `${firstMonth} - ${lastMonth}`;
-  }, [weekDates]);
+    const found = calendarDates.find(d => d.dateStr === activeDateStr);
+    if (!found) return '';
+    return `${found.month} ${found.year}`;
+  }, [activeDateStr, calendarDates]);
 
   const HOURS = React.useMemo(() => Array.from({ length: 24 }, (_, i) => i), []);
 
@@ -520,8 +542,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
             {/* Modal Header */}
             <div className="timetable-modal-header" style={{ padding: '20px 20px 10px 20px', borderBottom: 'none' }}>
               <div>
-                <h3 className="timetable-modal-title">Weekly Timetable • {monthHeader}</h3>
-                <p className="timetable-modal-subtitle">Manage slots for the entire week</p>
+                <h3 className="timetable-modal-title">Study Timetable • {monthHeader}</h3>
+                <p className="timetable-modal-subtitle">Manage slots for your schedule</p>
               </div>
               <button 
                 type="button" 
@@ -533,17 +555,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
             
             {/* Google Calendar horizontal Day Selector strip */}
-            <div className="calendar-day-strip">
-              {weekDates.map((item) => {
-                const isSelected = activeDay === item.dayName;
-                const isToday = item.dayName === todayDayName;
+            <div className="calendar-day-strip" ref={dayStripRef}>
+              {calendarDates.map((item) => {
+                const isSelected = activeDateStr === item.dateStr;
+                const isToday = item.dateStr === todayDateStr;
                 const shortName = item.dayName.slice(0, 3);
                 return (
                   <button
-                    key={item.dayName}
+                    key={item.dateStr}
                     type="button"
                     className={`day-strip-btn ${isSelected ? 'active' : ''} ${isToday ? 'today' : ''}`}
-                    onClick={() => setActiveDay(item.dayName)}
+                    onClick={() => setActiveDateStr(item.dateStr)}
                   >
                     <span className="day-strip-label">{shortName}</span>
                     <div className="day-strip-circle">

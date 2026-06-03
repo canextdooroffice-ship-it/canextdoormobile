@@ -3301,10 +3301,17 @@ body {
 /* Google Calendar View Styles for Timetable */
 .calendar-day-strip {
   display: flex;
-  justify-content: space-around;
-  border-bottom: 1px solid var(--border-color);
-  padding: 10px 0;
+  overflow-x: auto;
+  gap: 12px;
+  padding: 10px 16px;
   background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  scrollbar-width: none; /* Hide scrollbar for Firefox */
+  -webkit-overflow-scrolling: touch; /* Smooth scroll on iOS */
+}
+
+.calendar-day-strip::-webkit-scrollbar {
+  display: none; /* Hide scrollbar for Chrome/Safari */
 }
 
 .day-strip-btn {
@@ -3316,7 +3323,7 @@ body {
   gap: 4px;
   cursor: pointer;
   outline: none;
-  flex: 1;
+  flex: 0 0 48px; /* prevents shrinking, keeps tap target size */
 }
 
 .day-strip-label {
