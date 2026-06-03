@@ -30,6 +30,8 @@ const LS_KEYS = {
   EXAM_START_DATE: 'cand_examStartDate',
   TODAY_HOURS: 'cand_todayHours',
   TODAY_DATE_KEY: 'cand_todayDateKey',
+  STREAK_COUNT: 'cand_streakCount',
+  CHECKED_IN_TODAY: 'cand_checkedInToday',
 } as const;
 
 const loadFromStorage = <T,>(key: string, fallback: T): T => {
@@ -99,6 +101,13 @@ function App() {
   const [tasks, setTasks] = useState<Task[]>(() => loadFromStorage(LS_KEYS.TASKS, []));
   const [revisions, setRevisions] = useState<RevisionItem[]>(() => loadFromStorage(LS_KEYS.REVISIONS, []));
   const [mistakes, setMistakes] = useState<Mistake[]>(() => loadFromStorage(LS_KEYS.MISTAKES, []));
+  const [streakCount, setStreakCount] = useState<number>(() => {
+    const stored = loadFromStorage(LS_KEYS.STREAK_COUNT, 0);
+    return typeof stored === 'number' ? stored : 0;
+  });
+  const [checkedInToday, setCheckedInToday] = useState<boolean>(() => {
+    return loadFromStorage(LS_KEYS.CHECKED_IN_TODAY, false);
+  });
 
   // ---- Lifted Pomodoro Timer State (persists across tab switches) ----
   const [timerTimeLeft, setTimerTimeLeft] = useState(25 * 60);
@@ -206,16 +215,18 @@ function App() {
   useEffect(() => { saveToStorage(LS_KEYS.TASKS, tasks); }, [tasks]);
   useEffect(() => { saveToStorage(LS_KEYS.REVISIONS, revisions); }, [revisions]);
   useEffect(() => { saveToStorage(LS_KEYS.MISTAKES, mistakes); }, [mistakes]);
+  useEffect(() => { saveToStorage(LS_KEYS.STREAK_COUNT, streakCount); }, [streakCount]);
+  useEffect(() => { saveToStorage(LS_KEYS.CHECKED_IN_TODAY, checkedInToday); }, [checkedInToday]);
 
   // ---- Supabase cloud backup sync ----
   const syncTimerRef = useRef<number | null>(null);
   const hasSyncedRef = useRef(false); // prevent double-load on mount
 
   // Ref to always hold the latest state values for loadCloudData callbacks without stale closure issues
-  const stateRef = useRef({ progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate });
+  const stateRef = useRef({ progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday });
   useEffect(() => {
-    stateRef.current = { progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate };
-  }, [progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate]);
+    stateRef.current = { progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday };
+  }, [progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday]);
 
   // Load cloud data on login (restores progress on new device)
   const loadCloudData = useCallback(async (userId: string) => {
@@ -237,6 +248,8 @@ function App() {
             slots?: ScheduleSlot[];
             fullName?: string;
             examStartDate?: string;
+            streakCount?: number;
+            checkedInToday?: boolean;
           };
           setProgressState(packed.checklist || {});
           setTasks(packed.tasks || []);
@@ -245,6 +258,8 @@ function App() {
           setSlots(packed.slots || []);
           if (packed.fullName) setFullName(packed.fullName);
           if (packed.examStartDate) setExamStartDate(packed.examStartDate);
+          if (packed.streakCount !== undefined) setStreakCount(packed.streakCount);
+          if (packed.checkedInToday !== undefined) setCheckedInToday(packed.checkedInToday);
         } else {
           // Old format (just progressState)
           setProgressState(cloudState || {});
@@ -255,7 +270,7 @@ function App() {
         console.log('Progress restored from cloud backup.');
       } else {
         // No cloud data yet → push current local state as first backup
-        const { progressState: ps, caLevel: cl, studyTarget: st, totalHours: th, slots: sl, tasks: tk, revisions: rv, mistakes: ms, fullName: fn, examStartDate: esd } = stateRef.current;
+        const { progressState: ps, caLevel: cl, studyTarget: st, totalHours: th, slots: sl, tasks: tk, revisions: rv, mistakes: ms, fullName: fn, examStartDate: esd, streakCount: sc, checkedInToday: cit } = stateRef.current;
         
         // Pack state
         const packedProgress = {
@@ -265,7 +280,9 @@ function App() {
           mistakes: ms,
           slots: sl,
           fullName: fn,
-          examStartDate: esd
+          examStartDate: esd,
+          streakCount: sc,
+          checkedInToday: cit
         };
 
         await saveToSupabase(userId, {
@@ -296,7 +313,9 @@ function App() {
         mistakes,
         slots,
         fullName,
-        examStartDate
+        examStartDate,
+        streakCount,
+        checkedInToday
       };
 
       saveToSupabase(userId, {
@@ -310,7 +329,7 @@ function App() {
     return () => {
       if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     };
-  }, [progressState, caLevel, studyTarget, totalHours, fullName, examStartDate, tasks, revisions, mistakes, slots, session]);
+  }, [progressState, caLevel, studyTarget, totalHours, fullName, examStartDate, tasks, revisions, mistakes, slots, streakCount, checkedInToday, session]);
 
 
 
@@ -685,6 +704,10 @@ function App() {
                 progressState={progressState}
                 slots={slots}
                 setSlots={setSlots}
+                streakCount={streakCount}
+                setStreakCount={setStreakCount}
+                checkedInToday={checkedInToday}
+                setCheckedInToday={setCheckedInToday}
               />
             )}
             {activeTab === 'subjects' && (

@@ -29,6 +29,10 @@ interface DashboardProps {
   progressState: ProgressState;
   slots: ScheduleSlot[];
   setSlots: React.Dispatch<React.SetStateAction<ScheduleSlot[]>>;
+  streakCount: number;
+  setStreakCount: React.Dispatch<React.SetStateAction<number>>;
+  checkedInToday: boolean;
+  setCheckedInToday: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -42,6 +46,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
   progressState,
   slots,
   setSlots,
+  streakCount,
+  setStreakCount,
+  checkedInToday,
+  setCheckedInToday,
 }) => {
   // Extract user alias from real name or email fallback
   const userAlias = userFullName || (userEmail ? userEmail.split('@')[0] : 'Student');
@@ -124,34 +132,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const totalSubjectsProgress = subjects.reduce((acc, sub) => acc + sub.progress, 0);
   const averageReadiness = subjects.length > 0 ? Math.round(totalSubjectsProgress / subjects.length) : 0;
   const readinessVal = averageReadiness;
-
-
-  // Local state for check-in and streak count
-  const [streakCount, setStreakCount] = React.useState<number>(() => {
-    try {
-      const stored = localStorage.getItem('cand_streakCount');
-      return stored ? parseInt(stored, 10) : 0;
-    } catch {
-      return 0;
-    }
-  });
-  const [checkedInToday, setCheckedInToday] = React.useState<boolean>(() => {
-    try {
-      const stored = localStorage.getItem('cand_checkedInToday');
-      return stored ? JSON.parse(stored) : false;
-    } catch {
-      return false;
-    }
-  });
-
-  React.useEffect(() => {
-    try {
-      localStorage.setItem('cand_streakCount', streakCount.toString());
-      localStorage.setItem('cand_checkedInToday', JSON.stringify(checkedInToday));
-    } catch (err) {
-      console.warn('Failed to save streak to localStorage:', err);
-    }
-  }, [streakCount, checkedInToday]);
 
   const handleCheckIn = () => {
     if (!checkedInToday) {
