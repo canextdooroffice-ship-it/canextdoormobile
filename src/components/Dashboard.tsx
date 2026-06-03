@@ -186,6 +186,35 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
   }, [isTimetableModalOpen]);
 
+  // Calculate current week's dates (Monday to Sunday) dynamically
+  const weekDates = React.useMemo(() => {
+    const today = new Date();
+    const dayOfWeek = today.getDay(); // 0 is Sunday, 1 is Monday, etc.
+    const distanceToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - distanceToMonday);
+    
+    return Array.from({ length: 7 }, (_, idx) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + idx);
+      return {
+        dayName: ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'][idx],
+        dateNumber: d.getDate(),
+        month: d.toLocaleString('en-US', { month: 'short' })
+      };
+    });
+  }, []);
+
+  const monthHeader = React.useMemo(() => {
+    if (weekDates.length === 0) return '';
+    const firstMonth = weekDates[0].month;
+    const lastMonth = weekDates[6].month;
+    if (firstMonth === lastMonth) {
+      return firstMonth;
+    }
+    return `${firstMonth} - ${lastMonth}`;
+  }, [weekDates]);
+
   const HOURS = React.useMemo(() => Array.from({ length: 24 }, (_, i) => i), []);
 
   const formatHourLabel = (hour: number) => {
@@ -491,7 +520,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             {/* Modal Header */}
             <div className="timetable-modal-header" style={{ padding: '20px 20px 10px 20px', borderBottom: 'none' }}>
               <div>
-                <h3 className="timetable-modal-title">Weekly Timetable</h3>
+                <h3 className="timetable-modal-title">Weekly Timetable • {monthHeader}</h3>
                 <p className="timetable-modal-subtitle">Manage slots for the entire week</p>
               </div>
               <button 
@@ -505,21 +534,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
             
             {/* Google Calendar horizontal Day Selector strip */}
             <div className="calendar-day-strip">
-              {['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'].map((day) => {
-                const isSelected = activeDay === day;
-                const isToday = day === todayDayName;
-                const shortName = day.slice(0, 3);
-                const initial = day[0];
+              {weekDates.map((item) => {
+                const isSelected = activeDay === item.dayName;
+                const isToday = item.dayName === todayDayName;
+                const shortName = item.dayName.slice(0, 3);
                 return (
                   <button
-                    key={day}
+                    key={item.dayName}
                     type="button"
                     className={`day-strip-btn ${isSelected ? 'active' : ''} ${isToday ? 'today' : ''}`}
-                    onClick={() => setActiveDay(day)}
+                    onClick={() => setActiveDay(item.dayName)}
                   >
                     <span className="day-strip-label">{shortName}</span>
                     <div className="day-strip-circle">
-                      <span>{initial}</span>
+                      <span>{item.dateNumber}</span>
                     </div>
                   </button>
                 );
