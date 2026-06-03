@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Play, Pause, RotateCcw, X } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import { loadFromSupabase, saveToSupabase } from './lib/syncProgress';
 import type { Session } from '@supabase/supabase-js';
@@ -98,6 +99,97 @@ function App() {
   const [tasks, setTasks] = useState<Task[]>(() => loadFromStorage(LS_KEYS.TASKS, []));
   const [revisions, setRevisions] = useState<RevisionItem[]>(() => loadFromStorage(LS_KEYS.REVISIONS, []));
   const [mistakes, setMistakes] = useState<Mistake[]>(() => loadFromStorage(LS_KEYS.MISTAKES, []));
+
+  // ---- Lifted Pomodoro Timer State (persists across tab switches) ----
+  const [timerTimeLeft, setTimerTimeLeft] = useState(25 * 60);
+  const [timerRunning, setTimerRunning] = useState(false);
+  const [timerType, setTimerType] = useState<'focus' | 'break'>('focus');
+  const [timerPreset, setTimerPreset] = useState<'25' | '50' | '5'>('25');
+  const [timerStudyLabel, setTimerStudyLabel] = useState('');
+  const timerIntervalRef = useRef<number | null>(null);
+
+  const showLocalNotification = useCallback((title: string, body: string) => {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready
+        .then((registration) => {
+          registration.showNotification(title, {
+            body,
+            icon: '/logo.png',
+            badge: '/favicon.svg',
+            vibrate: [200, 100, 200],
+          } as NotificationOptions & { vibrate?: number[]; badge?: string });
+        })
+        .catch(() => { new Notification(title, { body }); });
+    } else {
+      new Notification(title, { body });
+    }
+  }, []);
+
+  // Timer interval — lives at App level so it never unmounts
+  useEffect(() => {
+    if (timerRunning) {
+      timerIntervalRef.current = window.setInterval(() => {
+        setTimerTimeLeft((prev) => {
+          if (prev <= 1) {
+            setTimerRunning(false);
+            if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+
+            if (timerType === 'focus') {
+              const hoursLogged = timerPreset === '50' ? 0.8 : 0.4;
+              setTotalHours((p) => parseFloat((p + hoursLogged).toFixed(1)));
+              setTodayHours((p) => parseFloat((p + hoursLogged).toFixed(1)));
+              showLocalNotification('Focus Session Complete! 🎯', `${timerPreset} minutes logged successfully. Great job!`);
+              alert(`Focus session complete! ${timerPreset} minutes logged successfully.`);
+            } else {
+              showLocalNotification('Break Over! ⚡', 'Ready to start focusing? Time to get back to work.');
+              alert('Break is complete! Ready to start focusing?');
+            }
+
+            return parseInt(timerPreset, 10) * 60;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    }
+    return () => { if (timerIntervalRef.current) clearInterval(timerIntervalRef.current); };
+  }, [timerRunning, timerType, timerPreset, showLocalNotification]);
+
+  const handleTimerSelectPreset = useCallback((preset: '25' | '50' | '5') => {
+    setTimerRunning(false);
+    setTimerPreset(preset);
+    setTimerType(preset === '5' ? 'break' : 'focus');
+    setTimerTimeLeft(parseInt(preset, 10) * 60);
+  }, []);
+
+  const handleTimerToggle = useCallback(() => {
+    if (!timerRunning && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+    setTimerRunning(r => !r);
+  }, [timerRunning]);
+
+  const handleTimerReset = useCallback(() => {
+    setTimerRunning(false);
+    setTimerTimeLeft(parseInt(timerPreset, 10) * 60);
+  }, [timerPreset]);
+
+  const formatTimerDisplay = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const timerStatusText = useMemo(() => {
+    if (timerRunning) return timerType === 'break' ? 'BREAK' : 'FOCUSING';
+    if (timerTimeLeft === parseInt(timerPreset, 10) * 60) return 'READY';
+    return 'PAUSED';
+  }, [timerRunning, timerType, timerTimeLeft, timerPreset]);
+
+  // Whether to show the sticky mini-timer (when timer is running or paused mid-session)
+  const showStickyTimer = timerRunning || (timerTimeLeft < parseInt(timerPreset, 10) * 60);
 
   // Persist all state changes to localStorage
   useEffect(() => { saveToStorage(LS_KEYS.PROGRESS, progressState); }, [progressState]);
@@ -618,6 +710,17 @@ function App() {
                 tasks={tasks}
                 setTasks={setTasks}
                 todayHours={todayHours}
+                timerTimeLeft={timerTimeLeft}
+                timerRunning={timerRunning}
+                timerType={timerType}
+                timerPreset={timerPreset}
+                timerStatusText={timerStatusText}
+                onTimerSelectPreset={handleTimerSelectPreset}
+                onTimerToggle={handleTimerToggle}
+                onTimerReset={handleTimerReset}
+                formatTimerDisplay={formatTimerDisplay}
+                timerStudyLabel={timerStudyLabel}
+                setTimerStudyLabel={setTimerStudyLabel}
               />
             )}
             {activeTab === 'analytics' && (
@@ -647,6 +750,43 @@ function App() {
           </>
         )}
       </div>
+
+      {/* Sticky floating mini-timer — visible on all screens when timer is active */}
+      {session && showStickyTimer && (
+        <div className={`sticky-mini-timer ${timerRunning ? 'running' : 'paused'} ${timerType === 'break' ? 'break-mode' : ''}`}>
+          <div className="mini-timer-ring">
+            <svg width="36" height="36" viewBox="0 0 36 36">
+              <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="3" />
+              <circle
+                cx="18" cy="18" r="15" fill="none"
+                stroke={timerType === 'break' ? '#34d399' : '#c084fc'}
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeDasharray={94.2}
+                strokeDashoffset={94.2 - (94.2 * timerTimeLeft) / (parseInt(timerPreset, 10) * 60)}
+                transform="rotate(-90 18 18)"
+                style={{ transition: 'stroke-dashoffset 0.3s ease' }}
+              />
+            </svg>
+            <span className="mini-timer-countdown">{formatTimerDisplay(timerTimeLeft)}</span>
+          </div>
+          <div className="mini-timer-info">
+            <span className="mini-timer-status">{timerStatusText}</span>
+            {timerStudyLabel && <span className="mini-timer-label">{timerStudyLabel}</span>}
+          </div>
+          <div className="mini-timer-controls">
+            <button type="button" className="mini-timer-btn" onClick={handleTimerToggle}>
+              {timerRunning ? <Pause size={14} /> : <Play size={14} fill="currentColor" />}
+            </button>
+            <button type="button" className="mini-timer-btn" onClick={handleTimerReset}>
+              <RotateCcw size={13} />
+            </button>
+            <button type="button" className="mini-timer-btn close" onClick={() => { setTimerRunning(false); setTimerTimeLeft(parseInt(timerPreset, 10) * 60); }}>
+              <X size={13} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* bottom navigation bar visible only when authorized */}
       {session && (

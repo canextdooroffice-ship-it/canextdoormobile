@@ -6359,3 +6359,165 @@ body {
 }
 
 
+/* ========================================
+   STICKY FLOATING MINI-TIMER
+   ======================================== */
+.sticky-mini-timer {
+  position: fixed;
+  bottom: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9998;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: 50px;
+  background: linear-gradient(135deg, rgba(30, 30, 50, 0.92), rgba(20, 20, 40, 0.96));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(192, 132, 252, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(192, 132, 252, 0.1) inset;
+  max-width: 380px;
+  width: auto;
+  animation: slideUpMiniTimer 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.sticky-mini-timer.break-mode {
+  border-color: rgba(52, 211, 153, 0.35);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(52, 211, 153, 0.1) inset;
+}
+
+.sticky-mini-timer.running {
+  animation: slideUpMiniTimer 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards, pulseGlowMini 2.5s ease-in-out infinite;
+}
+
+@keyframes slideUpMiniTimer {
+  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes pulseGlowMini {
+  0%, 100% { box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(192, 132, 252, 0.1) inset; }
+  50% { box-shadow: 0 8px 32px rgba(192, 132, 252, 0.2), 0 0 12px rgba(192, 132, 252, 0.15), 0 0 0 1px rgba(192, 132, 252, 0.2) inset; }
+}
+
+.mini-timer-ring {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mini-timer-ring svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.mini-timer-countdown {
+  position: relative;
+  z-index: 1;
+  font-size: 9px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 0.3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mini-timer-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.mini-timer-status {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  color: #c084fc;
+  text-transform: uppercase;
+}
+
+.sticky-mini-timer.break-mode .mini-timer-status {
+  color: #34d399;
+}
+
+.sticky-mini-timer.paused .mini-timer-status {
+  color: #facc15;
+}
+
+.mini-timer-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.55);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 130px;
+}
+
+.mini-timer-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.mini-timer-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mini-timer-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+.mini-timer-btn:active {
+  transform: scale(0.9);
+}
+
+.mini-timer-btn.close {
+  background: rgba(239, 68, 68, 0.15);
+  color: rgba(239, 68, 68, 0.7);
+}
+
+.mini-timer-btn.close:hover {
+  background: rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
+@media (max-width: 480px) {
+  .sticky-mini-timer {
+    left: 12px;
+    right: 12px;
+    transform: none;
+    max-width: none;
+    width: auto;
+    bottom: 68px;
+  }
+
+  .sticky-mini-timer.running {
+    animation: slideUpMiniTimerMobile 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards, pulseGlowMini 2.5s ease-in-out infinite;
+  }
+
+  @keyframes slideUpMiniTimerMobile {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}

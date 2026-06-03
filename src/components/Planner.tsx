@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Play, Pause, RotateCcw, Plus, Trash2, Target, Award, Calendar, Clock, Edit2, Check, BarChart2, Zap, Coffee, Maximize2, Minimize2 } from 'lucide-react';
 import { SYLLABUS_DATA } from '../constants/syllabus';
 
@@ -15,9 +15,26 @@ interface PlannerProps {
   tasks: Task[];
   setTasks: React.Dispatch<React.SetStateAction<Task[]>>;
   todayHours: number;
+  // Lifted timer props
+  timerTimeLeft: number;
+  timerRunning: boolean;
+  timerType: 'focus' | 'break';
+  timerPreset: '25' | '50' | '5';
+  timerStatusText: string;
+  onTimerSelectPreset: (preset: '25' | '50' | '5') => void;
+  onTimerToggle: () => void;
+  onTimerReset: () => void;
+  formatTimerDisplay: (seconds: number) => string;
+  timerStudyLabel: string;
+  setTimerStudyLabel: (label: string) => void;
 }
 
-export const Planner: React.FC<PlannerProps> = ({ onAddStudyHours, caLevel, tasks, setTasks, todayHours }) => {
+export const Planner: React.FC<PlannerProps> = ({
+  onAddStudyHours, caLevel, tasks, setTasks, todayHours,
+  timerTimeLeft, timerRunning, timerType: _timerType, timerPreset, timerStatusText,
+  onTimerSelectPreset, onTimerToggle, onTimerReset, formatTimerDisplay,
+  timerStudyLabel: _timerStudyLabel, setTimerStudyLabel,
+}) => {
   const [plannerTab, setPlannerTab] = useState<'tasks' | 'timer'>('tasks');
 
   // --- Task State ---
@@ -81,12 +98,12 @@ export const Planner: React.FC<PlannerProps> = ({ onAddStudyHours, caLevel, task
   const totalCount = tasks.length;
 
   // --- Focus Timer & Cycle States ---
-  const [selectedPreset, setSelectedPreset] = useState<'25' | '50' | '5'>('25');
-  const [timerType, setTimerType] = useState<'focus' | 'break'>('focus');
   const [isTimerFullscreen, setIsTimerFullscreen] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(25 * 60);
-  const [timerRunning, setTimerRunning] = useState(false);
-  const intervalRef = useRef<number | null>(null);
+
+  // Alias lifted timer props for shorter usage in JSX
+  const selectedPreset = timerPreset;
+  const timeLeft = timerTimeLeft;
+  const formatTime = formatTimerDisplay;
 
   const [wakeTime, setWakeTime] = useState(() => localStorage.getItem('cand_wakeTime') || '');
   const [sleepTime, setSleepTime] = useState(() => localStorage.getItem('cand_sleepTime') || '');
@@ -94,112 +111,11 @@ export const Planner: React.FC<PlannerProps> = ({ onAddStudyHours, caLevel, task
   // Use the prop-based todayHours instead of local state
   const todayFocusHours = todayHours;
 
-  const showLocalNotification = (title: string, body: string) => {
-    if (!('Notification' in window)) return;
-    if (Notification.permission === 'granted') {
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.ready
-          .then((registration) => {
-            registration.showNotification(title, {
-              body: body,
-              icon: '/logo.png',
-              badge: '/favicon.svg',
-              vibrate: [200, 100, 200],
-            } as NotificationOptions & { vibrate?: number[]; badge?: string });
-          })
-          .catch(() => {
-            new Notification(title, { body });
-          });
-      } else {
-        new Notification(title, { body });
-      }
-    }
+  // Update the study label whenever subject/chapter selection changes
+  const updateStudyLabel = (subject: string, chapter: string) => {
+    const label = subject ? (chapter ? `${subject} • ${chapter}` : subject) : '';
+    setTimerStudyLabel(label);
   };
-
-  const handleSelectPreset = (preset: '25' | '50' | '5') => {
-    setTimerRunning(false);
-    setSelectedPreset(preset);
-    if (preset === '5') {
-      setTimerType('break');
-    } else {
-      setTimerType('focus');
-    }
-    setTimeLeft(parseInt(preset, 10) * 60);
-  };
-
-  useEffect(() => {
-    if (timerRunning) {
-      intervalRef.current = window.setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            setTimerRunning(false);
-            if (intervalRef.current) clearInterval(intervalRef.current);
-            
-            if (timerType === 'focus') {
-              const hoursLogged = selectedPreset === '50' ? 0.8 : 0.4;
-              onAddStudyHours(hoursLogged);
-              
-              showLocalNotification(
-                'Focus Session Complete! 🎯',
-                `${selectedPreset} minutes logged successfully. Great job!`
-              );
-              
-              alert(`Focus session complete! ${selectedPreset} minutes logged successfully.`);
-            } else {
-              showLocalNotification(
-                'Break Over! ⚡',
-                'Ready to start focusing? Time to get back to work.'
-              );
-              
-              alert('Break is complete! Ready to start focusing?');
-            }
-            
-            return parseInt(selectedPreset, 10) * 60;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    }
-
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [timerRunning, timerType, selectedPreset, onAddStudyHours]);
-
-  const toggleTimer = () => {
-    if (!timerRunning && 'Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission().catch((err) =>
-        console.warn('Notification permission request failed', err)
-      );
-    }
-    setTimerRunning(!timerRunning);
-  };
-
-  const resetTimer = () => {
-    setTimerRunning(false);
-    setTimeLeft(parseInt(selectedPreset, 10) * 60);
-  };
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const timerStatusText = React.useMemo(() => {
-    if (timerRunning) {
-      return timerType === 'break' ? 'BREAK' : 'FOCUSING';
-    } else {
-      if (timeLeft === parseInt(selectedPreset, 10) * 60) {
-        return 'READY';
-      }
-      return 'PAUSED';
-    }
-  }, [timerRunning, timerType, timeLeft, selectedPreset]);
 
   useEffect(() => {
     localStorage.setItem('cand_wakeTime', wakeTime);
@@ -438,7 +354,7 @@ export const Planner: React.FC<PlannerProps> = ({ onAddStudyHours, caLevel, task
               <button 
                 type="button" 
                 className={`timer-preset-btn ${selectedPreset === '25' ? 'active' : ''}`}
-                onClick={() => handleSelectPreset('25')}
+                onClick={() => onTimerSelectPreset('25')}
               >
                 <Clock size={12} />
                 <span>25 min</span>
@@ -446,7 +362,7 @@ export const Planner: React.FC<PlannerProps> = ({ onAddStudyHours, caLevel, task
               <button 
                 type="button" 
                 className={`timer-preset-btn ${selectedPreset === '50' ? 'active' : ''}`}
-                onClick={() => handleSelectPreset('50')}
+                onClick={() => onTimerSelectPreset('50')}
               >
                 <Zap size={12} />
                 <span>50 min</span>
@@ -454,7 +370,7 @@ export const Planner: React.FC<PlannerProps> = ({ onAddStudyHours, caLevel, task
               <button 
                 type="button" 
                 className={`timer-preset-btn ${selectedPreset === '5' ? 'active' : ''}`}
-                onClick={() => handleSelectPreset('5')}
+                onClick={() => onTimerSelectPreset('5')}
               >
                 <Coffee size={12} />
                 <span>5 min</span>
@@ -493,13 +409,13 @@ export const Planner: React.FC<PlannerProps> = ({ onAddStudyHours, caLevel, task
             <div className="timer-bottom-controls">
               <button 
                 type="button" 
-                onClick={toggleTimer} 
+                onClick={() => { updateStudyLabel(selectedSubject, selectedChapter); onTimerToggle(); }} 
                 className={`timer-start-btn ${timerRunning ? 'running' : ''}`}
               >
                 {timerRunning ? <Pause size={16} /> : <Play size={16} fill="currentColor" />}
                 <span>{timerRunning ? 'Pause Focus' : 'Start Focus'}</span>
               </button>
-              <button type="button" onClick={resetTimer} className="timer-reset-circular-btn" aria-label="Reset Timer">
+              <button type="button" onClick={onTimerReset} className="timer-reset-circular-btn" aria-label="Reset Timer">
                 <RotateCcw size={16} />
               </button>
             </div>
@@ -670,13 +586,13 @@ export const Planner: React.FC<PlannerProps> = ({ onAddStudyHours, caLevel, task
                 <div className="timer-bottom-controls fullscreen">
                   <button 
                     type="button" 
-                    onClick={toggleTimer} 
+                    onClick={() => { updateStudyLabel(selectedSubject, selectedChapter); onTimerToggle(); }} 
                     className={`timer-start-btn fullscreen ${timerRunning ? 'running' : ''}`}
                   >
                     {timerRunning ? <Pause size={20} /> : <Play size={20} fill="currentColor" />}
                     <span>{timerRunning ? 'Pause Focus' : 'Start Focus'}</span>
                   </button>
-                  <button type="button" onClick={resetTimer} className="timer-reset-circular-btn fullscreen" aria-label="Reset Timer">
+                  <button type="button" onClick={onTimerReset} className="timer-reset-circular-btn fullscreen" aria-label="Reset Timer">
                     <RotateCcw size={20} />
                   </button>
                 </div>
