@@ -56,6 +56,11 @@ body {
   padding-right: env(safe-area-inset-right);
 }
 
+#root {
+  height: 100%;
+  width: 100%;
+}
+
 /* App shell: fills the viewport on both desktop and mobile */
 .app-shell-wrapper {
   width: 100%;
