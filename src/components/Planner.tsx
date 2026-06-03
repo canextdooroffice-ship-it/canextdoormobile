@@ -10,6 +10,7 @@ export interface Task {
 }
 
 interface PlannerProps {
+  showToast: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
   onAddStudyHours: (hours: number) => void;
   caLevel: string;
   tasks: Task[];
@@ -30,6 +31,7 @@ interface PlannerProps {
 }
 
 export const Planner: React.FC<PlannerProps> = ({
+  showToast,
   onAddStudyHours, caLevel, tasks, setTasks, todayHours,
   timerTimeLeft, timerRunning, timerType: _timerType, timerPreset, timerStatusText,
   onTimerSelectPreset, onTimerToggle, onTimerReset, formatTimerDisplay,
@@ -195,20 +197,20 @@ export const Planner: React.FC<PlannerProps> = ({
   const handleAddSessionBlock = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSubject) {
-      alert('Please select a subject.');
+      showToast('Please select a subject.', 'error');
       return;
     }
     if (!startTime || !endTime) {
-      alert('Please enter start and end times.');
+      showToast('Please enter start and end times.', 'error');
       return;
     }
     const hrs = calculateDurationHours(startTime, endTime);
     if (hrs <= 0) {
-      alert('End time must be after start time.');
+      showToast('End time must be after start time.', 'error');
       return;
     }
     onAddStudyHours(hrs);
-    alert(`Successfully logged ${hrs} hours of ${selectedSubject} (${selectedChapter || 'General'}) - ${selectedPhase}!`);
+    showToast(`Successfully logged ${hrs} hours of ${selectedSubject} (${selectedChapter || 'General'}) - ${selectedPhase}!`, 'success');
     setStartTime('');
     setEndTime('');
   };
@@ -434,7 +436,7 @@ export const Planner: React.FC<PlannerProps> = ({
           <div className="cycle-settings-section">
             <span className="section-title-lbl">DAILY CYCLE SETTINGS</span>
             <div className="cycle-settings-card">
-              <form onSubmit={(e) => { e.preventDefault(); alert("Daily Cycle data synced successfully!"); }} className="cycle-settings-form">
+              <form onSubmit={(e) => { e.preventDefault(); showToast("Daily Cycle data synced successfully!", "success"); }} className="cycle-settings-form">
                 <div className="cycle-form-row">
                   <div className="input-group">
                     <label>WAKE TIME</label>

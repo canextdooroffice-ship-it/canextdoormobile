@@ -29,6 +29,7 @@ export interface RevisionItem {
 }
 
 interface AnalyticsProps {
+  showToast: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
   caLevel: string;
   totalHours: number;
   progressState: ProgressState;
@@ -60,6 +61,7 @@ const getSubjectBadge = (subjectName: string): string => {
 };
 
 export const Analytics: React.FC<AnalyticsProps> = ({ 
+  showToast,
   caLevel,
   progressState,
   onToggleRevisionCycle,
@@ -151,7 +153,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
   const handleSaveMistake = (e: React.FormEvent) => {
     e.preventDefault();
     if (!logSubject || !logChapter) {
-      alert('Please select a subject and chapter.');
+      showToast('Please select a subject and chapter.', 'error');
       return;
     }
     const newMistake: Mistake = {
@@ -353,7 +355,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
   const handleSaveRevision = (e: React.FormEvent) => {
     e.preventDefault();
     if (!addSubject || !addChapter) {
-      alert('Please select a subject and chapter.');
+      showToast('Please select a subject and chapter.', 'error');
       return;
     }
     const newItem: RevisionItem = {

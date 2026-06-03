@@ -20,6 +20,7 @@ export interface ProgressState {
 }
 
 interface SubjectsProps {
+  showToast: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
   caLevel: string;
   progressState: ProgressState;
   onToggleClass: (subName: string, chapName: string) => void;
@@ -35,6 +36,7 @@ interface SubjectsProps {
 }
 
 export const Subjects: React.FC<SubjectsProps> = ({
+  showToast,
   caLevel,
   progressState,
   onToggleClass,
@@ -169,7 +171,7 @@ export const Subjects: React.FC<SubjectsProps> = ({
     setShowAddForm(false);
     // Auto-expand that subject folder
     setExpandedSubjects(prev => ({ ...prev, [newChapterSub]: true }));
-    alert(`Added chapter to ${newChapterSub}!`);
+    showToast(`Added chapter to ${newChapterSub}!`, 'success');
   };
 
   const handleAddNewSubject = (e: React.FormEvent) => {
@@ -180,7 +182,7 @@ export const Subjects: React.FC<SubjectsProps> = ({
     setNewSubjectName('');
     setShowAddSubForm(false);
     setExpandedSubjects((prev) => ({ ...prev, [newSubjectName.trim()]: true }));
-    alert(`Subject "${newSubjectName.trim()}" added!`);
+    showToast(`Subject "${newSubjectName.trim()}" added!`, 'success');
   };
 
 
@@ -723,7 +725,7 @@ export const Subjects: React.FC<SubjectsProps> = ({
                 const notesHtml = editorRef.current?.innerHTML || '';
                 onSetLdrNotes(activeLdrNote.subName, activeLdrNote.chapName, notesHtml, !isHtmlEmpty(notesHtml));
                 setActiveLdrNote(null);
-                alert("LDR Notes saved!");
+                showToast("LDR Notes saved!", "success");
               }}
             >
               Save

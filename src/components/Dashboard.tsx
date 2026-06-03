@@ -18,6 +18,7 @@ export interface ScheduleSlot {
 }
 
 interface DashboardProps {
+  showToast: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
   userEmail: string;
   userFullName: string;
   caLevel: string;
@@ -36,6 +37,7 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
+  showToast,
   userEmail,
   userFullName,
   caLevel,
@@ -43,6 +45,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   totalHours: _totalHours,
   todayHours,
   examStartDate,
+  onStartSession,
   progressState,
   slots,
   setSlots,
@@ -139,7 +142,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     if (!checkedInToday) {
       setStreakCount(prev => prev + 1);
       setCheckedInToday(true);
-      alert("Great job checking in today! Consistency is Key 🔥");
+      showToast("Great job checking in today! Consistency is Key 🔥", "success");
     } else {
       setStreakCount(prev => prev - 1);
       setCheckedInToday(false);

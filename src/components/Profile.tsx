@@ -3,6 +3,7 @@ import { LogOut, ShieldAlert, Settings, Briefcase, Clock, Layers, Copy, CheckCir
 import { supabase } from '../supabaseClient';
 
 interface ProfileProps {
+  showToast: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
   userEmail: string;
   caLevel: string;
   setCaLevel: (level: string) => void;
@@ -16,6 +17,7 @@ interface ProfileProps {
 }
 
 export const Profile: React.FC<ProfileProps> = ({
+  showToast,
   userEmail,
   caLevel,
   setCaLevel,
@@ -96,10 +98,10 @@ export const Profile: React.FC<ProfileProps> = ({
       onUpdateExamStartDate(examStartDate);
       setStudyTarget(studyTarget);
 
-      alert('Profile updated successfully! ✨');
+      showToast('Profile updated successfully! ✨', 'success');
     } catch (err) {
       console.warn('Failed to save profile changes:', err);
-      alert('Failed to save changes.');
+      showToast('Failed to save changes.', 'error');
     }
   };
 
@@ -114,13 +116,13 @@ export const Profile: React.FC<ProfileProps> = ({
     setArticleshipStartDate(getStoredValue('cand_articleshipStartDate', ''));
     setAllowedLeaves(parseInt(getStoredValue('cand_allowedLeaves', '0'), 10));
     setLeavesTaken(parseInt(getStoredValue('cand_leavesTaken', '0'), 10));
-    alert('Changes reverted.');
+    showToast('Changes reverted.', 'info');
   };
 
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
-      alert(`Error signing out: ${error.message}`);
+      showToast(`Error signing out: ${error.message}`, 'error');
     } else {
       onLogout();
     }

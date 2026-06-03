@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Play, Pause, RotateCcw, X, Timer } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Play, Pause, RotateCcw, X, Timer, CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import { loadFromSupabase, saveToSupabase } from './lib/syncProgress';
 import type { Session } from '@supabase/supabase-js';
@@ -107,6 +108,20 @@ function App() {
     return 0;
   });
 
+  // Toast notifications state
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
+
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') => {
+    setToast({ message, type });
+  }, []);
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
   // Lifted states
   const [slots, setSlots] = useState<ScheduleSlot[]>(() => loadFromStorage(LS_KEYS.SLOTS, []));
   const [tasks, setTasks] = useState<Task[]>(() => loadFromStorage(LS_KEYS.TASKS, []));
@@ -155,10 +170,10 @@ function App() {
               setTotalHours((p) => parseFloat((p + hoursLogged).toFixed(1)));
               setTodayHours((p) => parseFloat((p + hoursLogged).toFixed(1)));
               showLocalNotification('Focus Session Complete! 🎯', `${timerPreset} minutes logged successfully. Great job!`);
-              alert(`Focus session complete! ${timerPreset} minutes logged successfully.`);
+              showToast(`Focus session complete! ${timerPreset} minutes logged successfully.`, 'success');
             } else {
               showLocalNotification('Break Over! ⚡', 'Ready to start focusing? Time to get back to work.');
-              alert('Break is complete! Ready to start focusing?');
+              showToast('Break is complete! Ready to start focusing?', 'info');
             }
 
             return parseInt(timerPreset, 10) * 60;
@@ -709,6 +724,7 @@ function App() {
           <>
             {activeTab === 'home' && (
               <Dashboard
+                showToast={showToast}
                 userEmail={session.user.email || 'CA Student'}
                 userFullName={fullName}
                 caLevel={caLevel}
@@ -728,6 +744,7 @@ function App() {
             )}
             {activeTab === 'subjects' && (
               <Subjects
+                showToast={showToast}
                 caLevel={caLevel}
                 progressState={progressState}
                 onToggleClass={handleToggleClass}
@@ -744,6 +761,7 @@ function App() {
             )}
             {activeTab === 'planner' && (
               <Planner
+                showToast={showToast}
                 onAddStudyHours={handleAddStudyHours}
                 caLevel={caLevel}
                 tasks={tasks}
@@ -764,6 +782,7 @@ function App() {
             )}
             {activeTab === 'analytics' && (
               <Analytics 
+                showToast={showToast}
                 caLevel={caLevel}
                 totalHours={totalHours} 
                 progressState={progressState}
@@ -776,6 +795,7 @@ function App() {
             )}
             {activeTab === 'profile' && (
               <Profile
+                showToast={showToast}
                 userEmail={session.user.email || 'CA Student'}
                 caLevel={caLevel}
                 setCaLevel={handleUpdateCaLevel}
@@ -842,6 +862,20 @@ function App() {
       {/* bottom navigation bar visible only when authorized */}
       {session && (
         <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
+      )}
+
+      {/* Sleek App Toast Notifications Portal */}
+      {toast && createPortal(
+        <div className={`app-toast-container ${toast.type}`}>
+          <div className="app-toast-content">
+            {toast.type === 'success' && <CheckCircle size={16} className="toast-icon success" />}
+            {toast.type === 'error' && <AlertCircle size={16} className="toast-icon error" />}
+            {toast.type === 'warning' && <AlertTriangle size={16} className="toast-icon warning" />}
+            {toast.type === 'info' && <Info size={16} className="toast-icon info" />}
+            <span>{toast.message}</span>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
