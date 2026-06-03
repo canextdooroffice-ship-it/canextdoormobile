@@ -128,10 +128,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
     };
   });
 
-  // Calculate overall average readiness percentage
+  // Calculate overall average readiness percentage (weighted composite)
   const totalSubjectsProgress = subjects.reduce((acc, sub) => acc + sub.progress, 0);
-  const averageReadiness = subjects.length > 0 ? Math.round(totalSubjectsProgress / subjects.length) : 0;
-  const readinessVal = averageReadiness;
+  const syllabusReadiness = subjects.length > 0 ? totalSubjectsProgress / subjects.length : 0;
+
+  // Daily study progress component (todayHours vs studyTarget)
+  const dailyStudyProgress = studyTarget > 0 ? Math.min(100, (todayHours / studyTarget) * 100) : 0;
+
+  // Streak consistency component (capped at 7 days = 100%)
+  const streakProgress = Math.min(100, (streakCount / 7) * 100);
+
+  // Weighted composite: 50% syllabus + 30% daily study + 20% streak
+  const readinessVal = Math.round(
+    (syllabusReadiness * 0.5) + (dailyStudyProgress * 0.3) + (streakProgress * 0.2)
+  );
 
   const handleCheckIn = () => {
     if (!checkedInToday) {
@@ -379,9 +389,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <span className="kpi-unit">%</span>
           </div>
           <div className="kpi-footer">
-            <div className="kpi-footer-text green">
-              <span className="kpi-dot green"></span>
-              <span>Same as yesterday</span>
+            <div className={`kpi-footer-text ${readinessVal >= 50 ? 'green' : readinessVal > 0 ? 'orange' : ''}`}>
+              <span className={`kpi-dot ${readinessVal >= 50 ? 'green' : readinessVal > 0 ? 'orange' : ''}`}></span>
+              <span>{readinessVal >= 75 ? 'Great progress!' : readinessVal >= 30 ? 'Keep going!' : 'Start studying'}</span>
             </div>
           </div>
         </div>
