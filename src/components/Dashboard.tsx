@@ -123,25 +123,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
     const chapters = getSubjectChapters(name);
     return {
       name,
+      chapters: chapters.length,
       progress: calculateProgress(name, chapters),
       color: colors[idx % colors.length]
     };
   });
 
-  // Calculate overall average readiness percentage (weighted composite)
-  const totalSubjectsProgress = subjects.reduce((acc, sub) => acc + sub.progress, 0);
-  const syllabusReadiness = subjects.length > 0 ? totalSubjectsProgress / subjects.length : 0;
-
-  // Daily study progress component (todayHours vs studyTarget)
-  const dailyStudyProgress = studyTarget > 0 ? Math.min(100, (todayHours / studyTarget) * 100) : 0;
-
-  // Streak consistency component (capped at 7 days = 100%)
-  const streakProgress = Math.min(100, (streakCount / 7) * 100);
-
-  // Weighted composite: 50% syllabus + 30% daily study + 20% streak
-  const readinessVal = Math.round(
-    (syllabusReadiness * 0.5) + (dailyStudyProgress * 0.3) + (streakProgress * 0.2)
-  );
+  // Calculate overall average readiness percentage (syllabus completion only)
+  // Exclude subjects with 0 chapters so empty subjects don't drag the average down
+  const nonEmptySubjects = subjects.filter(sub => sub.chapters > 0);
+  const totalSubjectsProgress = nonEmptySubjects.reduce((acc, sub) => acc + sub.progress, 0);
+  const readinessVal = nonEmptySubjects.length > 0 ? Math.round(totalSubjectsProgress / nonEmptySubjects.length) : 0;
 
   const handleCheckIn = () => {
     if (!checkedInToday) {
