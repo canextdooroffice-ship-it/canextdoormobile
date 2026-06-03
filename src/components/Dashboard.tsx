@@ -282,11 +282,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const todaySlots = React.useMemo(() => {
     return slots
       .filter(s => {
-        if (s.day !== todayDayName) return false;
         if (s.isCustomRange) {
           return !!(s.dateFrom && s.dateTo && todayDateStr >= s.dateFrom && todayDateStr <= s.dateTo);
         }
-        return true;
+        return s.day === todayDayName;
       })
       .sort((a, b) => a.timeStart.localeCompare(b.timeStart));
   }, [slots, todayDayName, todayDateStr]);
@@ -693,6 +692,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <div className="day-strip-circle">
                       <span>{item.dateNumber}</span>
                     </div>
+                    <span className="day-strip-month" style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', color: isSelected ? 'var(--accent-primary)' : 'var(--text-muted)', marginTop: '2px' }}>{item.month}</span>
                   </button>
                 );
               })}
@@ -712,11 +712,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 {/* Floating absolute positioned events for activeDay */}
                 {slots
                   .filter((s) => {
-                    if (s.day !== activeDay) return false;
                     if (s.isCustomRange) {
                       return !!(s.dateFrom && s.dateTo && activeDateStr >= s.dateFrom && activeDateStr <= s.dateTo);
                     }
-                    return true;
+                    return s.day === activeDay;
                   })
                   .map((slot) => {
                     const startMins = parseTimeToMinutes(slot.timeStart);
@@ -769,11 +768,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   
                 {/* Empty State */}
                 {slots.filter((s) => {
-                  if (s.day !== activeDay) return false;
                   if (s.isCustomRange) {
                     return !!(s.dateFrom && s.dateTo && activeDateStr >= s.dateFrom && activeDateStr <= s.dateTo);
                   }
-                  return true;
+                  return s.day === activeDay;
                 }).length === 0 && (
                   <div className="calendar-empty-state">
                     <Calendar size={32} className="text-muted" style={{ marginBottom: '8px' }} />
@@ -809,11 +807,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
             
             {/* Floating Action Button (FAB) to Add Slot */}
             {slots.filter((s) => {
-              if (s.day !== activeDay) return false;
               if (s.isCustomRange) {
                 return !!(s.dateFrom && s.dateTo && activeDateStr >= s.dateFrom && activeDateStr <= s.dateTo);
               }
-              return true;
+              return s.day === activeDay;
             }).length > 0 && (
               <button
                 type="button"

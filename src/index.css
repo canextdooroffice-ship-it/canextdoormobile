@@ -3368,6 +3368,7 @@ body {
   -webkit-overflow-scrolling: touch; /* Smooth momentum scroll on iOS */
   position: relative;
   background-color: white;
+  padding-top: 12px; /* Prevent 12 AM label clipping */
   padding-bottom: 80px; /* space to scroll past the FAB */
   scrollbar-width: none; /* Firefox */
 }
