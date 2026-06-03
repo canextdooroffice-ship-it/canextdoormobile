@@ -6515,7 +6515,10 @@ body {
     animation: slideUpMiniTimerMobile 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
 
-
+  .sticky-mini-timer.running,
+  .sticky-mini-timer.break-mode.running {
+    animation: slideUpMiniTimerMobile 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
 
   @keyframes slideUpMiniTimerMobile {
     from { opacity: 0; transform: translateY(24px); }
