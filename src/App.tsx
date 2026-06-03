@@ -757,23 +757,8 @@ function App() {
         <div className={`sticky-mini-timer ${timerRunning ? 'running' : 'paused'} ${timerType === 'break' ? 'break-mode' : ''}`}>
           <div className="mini-timer-content-group">
             <div className="mini-timer-left">
-              <div className="mini-timer-ring">
-                <svg width="44" height="44" viewBox="0 0 44 44">
-                  <circle cx="22" cy="22" r="19" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3.5" />
-                  <circle
-                    cx="22" cy="22" r="19" fill="none"
-                    stroke={timerType === 'break' ? '#10b981' : '#a855f7'}
-                    strokeWidth="3.5"
-                    strokeLinecap="round"
-                    strokeDasharray={119.38}
-                    strokeDashoffset={119.38 - (119.38 * timerTimeLeft) / (parseInt(timerPreset, 10) * 60)}
-                    transform="rotate(-90 22 22)"
-                    style={{ transition: 'stroke-dashoffset 0.3s ease' }}
-                  />
-                </svg>
-                <div className="mini-timer-badge">
-                  <Timer size={10} className="mini-timer-badge-icon" />
-                </div>
+              <div className="mini-timer-icon-only">
+                <Timer size={22} />
               </div>
             </div>
 

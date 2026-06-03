@@ -6426,35 +6426,25 @@ body {
   height: 44px;
 }
 
-.mini-timer-ring {
+.mini-timer-icon-only {
   width: 44px;
   height: 44px;
-}
-
-.mini-timer-ring svg {
-  position: absolute;
-  top: 0;
-  left: 0;
-}
-
-.mini-timer-badge {
-  position: absolute;
-  bottom: -2px;
-  right: -2px;
-  width: 18px;
-  height: 18px;
-  background: #171520;
-  border-radius: 50%;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.03);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2;
-  box-shadow: 0 0 4px rgba(0,0,0,0.5);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  color: #a855f7;
+  transition: all 0.2s ease;
 }
 
-.mini-timer-badge-icon {
-  color: #ffffff;
+.sticky-mini-timer.break-mode .mini-timer-icon-only {
+  color: #10b981;
+}
+
+.sticky-mini-timer.paused .mini-timer-icon-only {
+  color: #facc15;
 }
 
 .mini-timer-center {
