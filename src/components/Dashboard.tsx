@@ -4,24 +4,43 @@ import { Flame, Calendar, Target, Timer, Check, Trash2, X, Clock, Plus } from 'l
 import { SYLLABUS_DATA } from '../constants/syllabus';
 import type { ProgressState } from './Subjects';
 
+export interface ScheduleSlot {
+  id: string;
+  day: string; // 'MONDAY', 'TUESDAY', etc.
+  subject: string;
+  chapter?: string;
+  phase?: string;
+  timeStart: string; // e.g. '09:00'
+  timeEnd: string; // e.g. '11:00'
+  isCustomRange?: boolean;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
 interface DashboardProps {
   userEmail: string;
+  userFullName: string;
   caLevel: string;
   studyTarget: number; // e.g. 6 hours
   totalHours: number;
   onStartSession: () => void;
   progressState: ProgressState;
+  slots: ScheduleSlot[];
+  setSlots: React.Dispatch<React.SetStateAction<ScheduleSlot[]>>;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
   userEmail,
+  userFullName,
   caLevel,
   studyTarget,
   totalHours,
   progressState,
+  slots,
+  setSlots,
 }) => {
-  // Extract user alias from email
-  const userAlias = userEmail ? userEmail.split('@')[0] : 'Student';
+  // Extract user alias from real name or email fallback
+  const userAlias = userFullName || (userEmail ? userEmail.split('@')[0] : 'Student');
   
   // Calculate today's logged study hours dynamically based on totalHours
   // totalHours starts at 14.5, todayLogged starts at 3.5. Let's compute difference!
@@ -88,24 +107,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const averageReadiness = subjects.length > 0 ? Math.round(totalSubjectsProgress / subjects.length) : 0;
   const readinessVal = averageReadiness > 0 ? averageReadiness : 79.5;
 
-  // Count chapters completed classes (classDone = true)
-  let topicsDoneCount = 0;
-  getAllSubjects().forEach((subName) => {
-    const chapters = getSubjectChapters(subName);
-    chapters.forEach((chap) => {
-      if (progressState[subName]?.[chap]?.classDone) {
-        topicsDoneCount++;
-      }
-    });
-  });
 
   // Local state for check-in and streak count
   const [streakCount, setStreakCount] = React.useState<number>(() => {
     try {
       const stored = localStorage.getItem('cand_streakCount');
-      return stored ? parseInt(stored, 10) : 7;
+      return stored ? parseInt(stored, 10) : 0;
     } catch {
-      return 7;
+      return 0;
     }
   });
   const [checkedInToday, setCheckedInToday] = React.useState<boolean>(() => {
@@ -137,37 +146,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
   };
   // Today's schedule state & methods
-  interface ScheduleSlot {
-    id: string;
-    day: string; // 'MONDAY', 'TUESDAY', etc.
-    subject: string;
-    chapter?: string;
-    timeStart: string; // e.g. '09:00'
-    timeEnd: string; // e.g. '11:00'
-    isCustomRange?: boolean;
-    dateFrom?: string;
-    dateTo?: string;
-  }
-
   const todayDayName = React.useMemo(() => {
     return new Date().toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
   }, []);
-
-  const [slots, setSlots] = React.useState<ScheduleSlot[]>(() => {
-    try {
-      const stored = localStorage.getItem('cand_schedule_slots');
-      if (stored) return JSON.parse(stored);
-    } catch {}
-    return [];
-  });
-
-  React.useEffect(() => {
-    try {
-      localStorage.setItem('cand_schedule_slots', JSON.stringify(slots));
-    } catch (err) {
-      console.warn('Failed to save slots to localStorage:', err);
-    }
-  }, [slots]);
 
   const [isTimetableModalOpen, setIsTimetableModalOpen] = React.useState(false);
   const [isAddingSlot, setIsAddingSlot] = React.useState(false);
@@ -293,6 +274,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const handleSaveSlot = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSlotSubject) return;
+
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+
     const newSlot: ScheduleSlot = {
       id: Date.now().toString(),
       day: todayDayName,
@@ -311,6 +297,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const handleSaveSlotFromModal = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSlotSubject) return;
+
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+
     const newSlot: ScheduleSlot = {
       id: Date.now().toString(),
       day: newSlotDay,

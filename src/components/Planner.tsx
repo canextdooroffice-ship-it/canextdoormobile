@@ -2,35 +2,24 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Play, Pause, RotateCcw, Plus, Trash2, Target, Award, Calendar, Clock, Edit2, Check, BarChart2, Zap, Coffee, Maximize2, Minimize2 } from 'lucide-react';
 import { SYLLABUS_DATA } from '../constants/syllabus';
 
-interface PlannerProps {
-  onAddStudyHours: (hours: number) => void;
-  caLevel: string;
-}
-
-interface Task {
+export interface Task {
   id: number;
   text: string;
   completed: boolean;
   targetDate: string; // YYYY-MM-DD
 }
 
-export const Planner: React.FC<PlannerProps> = ({ onAddStudyHours, caLevel }) => {
+interface PlannerProps {
+  onAddStudyHours: (hours: number) => void;
+  caLevel: string;
+  tasks: Task[];
+  setTasks: React.Dispatch<React.SetStateAction<Task[]>>;
+}
+
+export const Planner: React.FC<PlannerProps> = ({ onAddStudyHours, caLevel, tasks, setTasks }) => {
   const [plannerTab, setPlannerTab] = useState<'tasks' | 'timer'>('tasks');
 
   // --- Task State ---
-  const [tasks, setTasks] = useState<Task[]>(() => {
-    try {
-      const stored = localStorage.getItem('cand_planner_tasks');
-      if (stored) return JSON.parse(stored);
-    } catch {}
-    return [
-      { id: 1, text: 'Solve registration question', completed: true, targetDate: '2026-04-10' },
-      { id: 2, text: 'Complete SA-700-705', completed: false, targetDate: '2026-04-05' },
-      { id: 3, text: 'Write mock test paper for FR', completed: false, targetDate: '2026-05-31' },
-      { id: 4, text: 'Revise tax exemptions list', completed: false, targetDate: '2026-05-31' },
-      { id: 5, text: 'Practice 5 sums of consolidated balance sheet', completed: true, targetDate: '2026-05-31' }
-    ];
-  });
 
   const getTodayDateString = () => {
     const today = new Date();
@@ -44,13 +33,7 @@ export const Planner: React.FC<PlannerProps> = ({ onAddStudyHours, caLevel }) =>
   const [newTaskDate, setNewTaskDate] = useState(getTodayDateString);
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('cand_planner_tasks', JSON.stringify(tasks));
-    } catch (err) {
-      console.warn('Failed to save tasks to localStorage:', err);
-    }
-  }, [tasks]);
+
 
   const handleAddTask = (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,6 +99,28 @@ export const Planner: React.FC<PlannerProps> = ({ onAddStudyHours, caLevel }) =>
     }
   });
 
+  const showLocalNotification = (title: string, body: string) => {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'granted') {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready
+          .then((registration) => {
+            registration.showNotification(title, {
+              body: body,
+              icon: '/logo.png',
+              badge: '/favicon.svg',
+              vibrate: [200, 100, 200],
+            } as NotificationOptions & { vibrate?: number[]; badge?: string });
+          })
+          .catch(() => {
+            new Notification(title, { body });
+          });
+      } else {
+        new Notification(title, { body });
+      }
+    }
+  };
+
   const handleSelectPreset = (preset: '25' | '50' | '5') => {
     setTimerRunning(false);
     setSelectedPreset(preset);
@@ -139,8 +144,19 @@ export const Planner: React.FC<PlannerProps> = ({ onAddStudyHours, caLevel }) =>
               const hoursLogged = selectedPreset === '50' ? 0.8 : 0.4;
               onAddStudyHours(hoursLogged);
               setTodayFocusHours(prevVal => parseFloat((prevVal + hoursLogged).toFixed(1)));
+              
+              showLocalNotification(
+                'Focus Session Complete! 🎯',
+                `${selectedPreset} minutes logged successfully. Great job!`
+              );
+              
               alert(`Focus session complete! ${selectedPreset} minutes logged successfully.`);
             } else {
+              showLocalNotification(
+                'Break Over! ⚡',
+                'Ready to start focusing? Time to get back to work.'
+              );
+              
               alert('Break is complete! Ready to start focusing?');
             }
             
@@ -160,7 +176,14 @@ export const Planner: React.FC<PlannerProps> = ({ onAddStudyHours, caLevel }) =>
     };
   }, [timerRunning, timerType, selectedPreset, onAddStudyHours]);
 
-  const toggleTimer = () => setTimerRunning(!timerRunning);
+  const toggleTimer = () => {
+    if (!timerRunning && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch((err) =>
+        console.warn('Notification permission request failed', err)
+      );
+    }
+    setTimerRunning(!timerRunning);
+  };
 
   const resetTimer = () => {
     setTimerRunning(false);
@@ -220,25 +243,35 @@ export const Planner: React.FC<PlannerProps> = ({ onAddStudyHours, caLevel }) =>
   const subjects = Object.keys(currentSyllabus);
 
   const [selectedSubject, setSelectedSubject] = useState(subjects[0] || '');
-  const [selectedChapter, setSelectedChapter] = useState('');
+  const [selectedChapter, setSelectedChapter] = useState(() => {
+    const initialSub = subjects[0] || '';
+    const initialChaps = currentSyllabus[initialSub] || [];
+    return initialChaps[0] || '';
+  });
   const [selectedPhase, setSelectedPhase] = useState('Class');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [prevCaLevel, setPrevCaLevel] = useState(caLevel);
 
-  // Sync selected subject on caLevel change
-  if (caLevel !== prevCaLevel) {
-    setPrevCaLevel(caLevel);
-    setSelectedSubject(subjects[0] || '');
-  }
-
   const chapters = React.useMemo(() => {
     return currentSyllabus[selectedSubject] || [];
   }, [selectedSubject, currentSyllabus]);
 
-  useEffect(() => {
-    setSelectedChapter(chapters[0] || '');
-  }, [chapters]);
+  // Sync selected subject and chapter on caLevel change
+  if (caLevel !== prevCaLevel) {
+    setPrevCaLevel(caLevel);
+    const initialSub = subjects[0] || '';
+    setSelectedSubject(initialSub);
+    const levelSyllabus = (SYLLABUS_DATA[caLevel as keyof typeof SYLLABUS_DATA] || SYLLABUS_DATA.Intermediate) as Record<string, string[]>;
+    const initialChaps = levelSyllabus[initialSub] || [];
+    setSelectedChapter(initialChaps[0] || '');
+  }
+
+  const handleSubjectChange = (subjectVal: string) => {
+    setSelectedSubject(subjectVal);
+    const chaps = currentSyllabus[subjectVal] || [];
+    setSelectedChapter(chaps[0] || '');
+  };
 
   const calculateDurationHours = (start: string, end: string): number => {
     if (!start || !end) return 0;
@@ -370,7 +403,7 @@ export const Planner: React.FC<PlannerProps> = ({ onAddStudyHours, caLevel }) =>
               <div className="form-group mb-2">
                 <select 
                   value={selectedSubject} 
-                  onChange={(e) => setSelectedSubject(e.target.value)}
+                  onChange={(e) => handleSubjectChange(e.target.value)}
                   className="timer-select select-subject"
                   required
                 >
@@ -531,7 +564,7 @@ export const Planner: React.FC<PlannerProps> = ({ onAddStudyHours, caLevel }) =>
                   <label>SUBJECT</label>
                   <select 
                     value={selectedSubject} 
-                    onChange={(e) => setSelectedSubject(e.target.value)}
+                    onChange={(e) => handleSubjectChange(e.target.value)}
                     className="styled-select"
                     required
                   >

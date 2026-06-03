@@ -817,7 +817,7 @@ export const Subjects: React.FC<SubjectsProps> = ({
               ref={editorRef}
               className="notepad-textarea content-editable-notepad"
               contentEditable
-              {...({ placeholder: "Write your Last Day Revision (LDR) notes here... e.g. key formulas, adjustments to check, or critical questions." } as any)}
+              {...({ placeholder: "Write your Last Day Revision (LDR) notes here... e.g. key formulas, adjustments to check, or critical questions." } as React.HTMLAttributes<HTMLDivElement> & { placeholder?: string })}
             />
           </div>
         </div>,

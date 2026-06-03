@@ -11,6 +11,9 @@ import { Profile } from './components/Profile';
 import { Subjects } from './components/Subjects';
 import { SYLLABUS_DATA } from './constants/syllabus';
 import type { ProgressState } from './components/Subjects';
+import type { ScheduleSlot } from './components/Dashboard';
+import type { Task } from './components/Planner';
+import type { RevisionItem, Mistake } from './components/Analytics';
 
 // ---- localStorage persistence keys ----
 const LS_KEYS = {
@@ -18,6 +21,11 @@ const LS_KEYS = {
   CA_LEVEL: 'cand_caLevel',
   STUDY_TARGET: 'cand_studyTarget',
   TOTAL_HOURS: 'cand_totalHours',
+  FULL_NAME: 'cand_fullName',
+  SLOTS: 'cand_schedule_slots',
+  TASKS: 'cand_planner_tasks',
+  REVISIONS: 'cand_revisions',
+  MISTAKES: 'cand_mistakes',
 } as const;
 
 const loadFromStorage = <T,>(key: string, fallback: T): T => {
@@ -45,53 +53,16 @@ const buildInitialProgress = (): ProgressState => {
       if (!state[subName]) {
         state[subName] = {};
       }
-      chapters.forEach((chap, idx) => {
-        // Assign priorities: first chapter Priority A, middle B, later C
-        let p: 'A' | 'B' | 'C' = 'C';
-        if (idx === 0 || idx === 3) p = 'A';
-        else if (idx === 1) p = 'B';
-        
+      chapters.forEach((chap) => {
         state[subName][chap] = {
           classDone: false,
-          priority: p,
-          ldrs: idx === 0, // Mock LDRS for first chapter
+          priority: 'C',
+          ldrs: false,
           revisionCycle: 0,
         };
       });
     });
   });
-
-  // Seed default checked benchmarks to make the app look active on first mount
-  if (state['Advanced Accounting']) {
-    if (state['Advanced Accounting']['1. AS 10: Property, Plant and Equipment']) {
-      state['Advanced Accounting']['1. AS 10: Property, Plant and Equipment'].classDone = true;
-      state['Advanced Accounting']['1. AS 10: Property, Plant and Equipment'].revisionCycle = 1;
-    }
-    if (state['Advanced Accounting']['2. AS 19: Leases']) {
-      state['Advanced Accounting']['2. AS 19: Leases'].classDone = true;
-    }
-    if (state['Advanced Accounting']['3. Company Financial Statements & Buybacks']) {
-      state['Advanced Accounting']['3. Company Financial Statements & Buybacks'].classDone = true;
-      state['Advanced Accounting']['3. Company Financial Statements & Buybacks'].revisionCycle = 2;
-    }
-  }
-  
-  // Seed CA Final benchmarks
-  if (state['Financial Reporting (FR)']) {
-    if (state['Financial Reporting (FR)']['1. intro to Ind As']) {
-      state['Financial Reporting (FR)']['1. intro to Ind As'].classDone = true;
-      state['Financial Reporting (FR)']['1. intro to Ind As'].revisionCycle = 3;
-    }
-    if (state['Financial Reporting (FR)']['10. Ind As-38']) {
-      state['Financial Reporting (FR)']['10. Ind As-38'].classDone = true;
-      state['Financial Reporting (FR)']['10. Ind As-38'].revisionCycle = 2;
-    }
-    if (state['Financial Reporting (FR)']['11. Ind AS-40']) {
-      state['Financial Reporting (FR)']['11. Ind AS-40'].priority = 'B';
-      state['Financial Reporting (FR)']['11. Ind AS-40'].revisionCycle = 1;
-    }
-  }
-
   return state;
 };
 
@@ -102,26 +73,38 @@ function App() {
   // CA Student settings — loaded from localStorage first, then Supabase metadata
   const [caLevel, setCaLevel] = useState<string>(() => loadFromStorage(LS_KEYS.CA_LEVEL, 'Intermediate'));
   const [studyTarget, setStudyTarget] = useState<number>(() => loadFromStorage(LS_KEYS.STUDY_TARGET, 6));
-  const [totalHours, setTotalHours] = useState<number>(() => loadFromStorage(LS_KEYS.TOTAL_HOURS, 14.5));
+  const [totalHours, setTotalHours] = useState<number>(() => loadFromStorage(LS_KEYS.TOTAL_HOURS, 0));
   const [progressState, setProgressState] = useState<ProgressState>(() =>
     loadFromStorage<ProgressState>(LS_KEYS.PROGRESS, buildInitialProgress())
   );
+  const [fullName, setFullName] = useState<string>(() => loadFromStorage(LS_KEYS.FULL_NAME, ''));
+
+  // Lifted states
+  const [slots, setSlots] = useState<ScheduleSlot[]>(() => loadFromStorage(LS_KEYS.SLOTS, []));
+  const [tasks, setTasks] = useState<Task[]>(() => loadFromStorage(LS_KEYS.TASKS, []));
+  const [revisions, setRevisions] = useState<RevisionItem[]>(() => loadFromStorage(LS_KEYS.REVISIONS, []));
+  const [mistakes, setMistakes] = useState<Mistake[]>(() => loadFromStorage(LS_KEYS.MISTAKES, []));
 
   // Persist all state changes to localStorage
   useEffect(() => { saveToStorage(LS_KEYS.PROGRESS, progressState); }, [progressState]);
   useEffect(() => { saveToStorage(LS_KEYS.CA_LEVEL, caLevel); }, [caLevel]);
   useEffect(() => { saveToStorage(LS_KEYS.STUDY_TARGET, studyTarget); }, [studyTarget]);
   useEffect(() => { saveToStorage(LS_KEYS.TOTAL_HOURS, totalHours); }, [totalHours]);
+  useEffect(() => { saveToStorage(LS_KEYS.FULL_NAME, fullName); }, [fullName]);
+  useEffect(() => { saveToStorage(LS_KEYS.SLOTS, slots); }, [slots]);
+  useEffect(() => { saveToStorage(LS_KEYS.TASKS, tasks); }, [tasks]);
+  useEffect(() => { saveToStorage(LS_KEYS.REVISIONS, revisions); }, [revisions]);
+  useEffect(() => { saveToStorage(LS_KEYS.MISTAKES, mistakes); }, [mistakes]);
 
   // ---- Supabase cloud backup sync ----
   const syncTimerRef = useRef<number | null>(null);
   const hasSyncedRef = useRef(false); // prevent double-load on mount
 
   // Ref to always hold the latest state values for loadCloudData callbacks without stale closure issues
-  const stateRef = useRef({ progressState, caLevel, studyTarget, totalHours });
+  const stateRef = useRef({ progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName });
   useEffect(() => {
-    stateRef.current = { progressState, caLevel, studyTarget, totalHours };
-  }, [progressState, caLevel, studyTarget, totalHours]);
+    stateRef.current = { progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName };
+  }, [progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName]);
 
   // Load cloud data on login (restores progress on new device)
   const loadCloudData = useCallback(async (userId: string) => {
@@ -132,16 +115,47 @@ function App() {
       hasSyncedRef.current = true; // only mark synced if load completed successfully (found or not found)
       if (cloud) {
         // Cloud data exists → restore it (overrides local)
-        setProgressState(cloud.progress_state);
+        const cloudState = cloud.progress_state;
+        if (cloudState && typeof cloudState === 'object' && 'checklist' in cloudState) {
+          // Unpack new format
+          const packed = cloudState as unknown as {
+            checklist?: ProgressState;
+            tasks?: Task[];
+            revisions?: RevisionItem[];
+            mistakes?: Mistake[];
+            slots?: ScheduleSlot[];
+            fullName?: string;
+          };
+          setProgressState(packed.checklist || {});
+          setTasks(packed.tasks || []);
+          setRevisions(packed.revisions || []);
+          setMistakes(packed.mistakes || []);
+          setSlots(packed.slots || []);
+          if (packed.fullName) setFullName(packed.fullName);
+        } else {
+          // Old format (just progressState)
+          setProgressState(cloudState || {});
+        }
         setCaLevel(cloud.ca_level);
         setStudyTarget(cloud.study_target);
         setTotalHours(cloud.total_hours);
         console.log('Progress restored from cloud backup.');
       } else {
         // No cloud data yet → push current local state as first backup
-        const { progressState: ps, caLevel: cl, studyTarget: st, totalHours: th } = stateRef.current;
+        const { progressState: ps, caLevel: cl, studyTarget: st, totalHours: th, slots: sl, tasks: tk, revisions: rv, mistakes: ms, fullName: fn } = stateRef.current;
+        
+        // Pack state
+        const packedProgress = {
+          checklist: ps,
+          tasks: tk,
+          revisions: rv,
+          mistakes: ms,
+          slots: sl,
+          fullName: fn
+        };
+
         await saveToSupabase(userId, {
-          progress_state: ps,
+          progress_state: packedProgress as unknown as ProgressState,
           ca_level: cl,
           study_target: st,
           total_hours: th,
@@ -160,8 +174,18 @@ function App() {
 
     if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     syncTimerRef.current = window.setTimeout(() => {
+      // Pack the state
+      const packedProgress = {
+        checklist: progressState,
+        tasks,
+        revisions,
+        mistakes,
+        slots,
+        fullName
+      };
+
       saveToSupabase(userId, {
-        progress_state: progressState,
+        progress_state: packedProgress as unknown as ProgressState,
         ca_level: caLevel,
         study_target: studyTarget,
         total_hours: totalHours,
@@ -171,7 +195,7 @@ function App() {
     return () => {
       if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     };
-  }, [progressState, caLevel, studyTarget, totalHours, session]);
+  }, [progressState, caLevel, studyTarget, totalHours, fullName, tasks, revisions, mistakes, slots, session]);
 
 
 
@@ -180,6 +204,7 @@ function App() {
       const meta = currentSession.user.user_metadata;
       if (meta.ca_level) setCaLevel(meta.ca_level);
       if (meta.study_hours_target) setStudyTarget(meta.study_hours_target);
+      if (meta.full_name) setFullName(meta.full_name);
     }
   };
 
@@ -211,6 +236,90 @@ function App() {
     };
   }, [loadCloudData]);
 
+  // Background scheduler for study slot starting times
+  useEffect(() => {
+    let lastNotifiedKey = '';
+
+    const checkScheduleSlots = () => {
+      if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+      try {
+        const rawSlots = localStorage.getItem('cand_schedule_slots');
+        if (!rawSlots) return;
+        interface LocalScheduleSlot {
+          id: string;
+          subject: string;
+          chapter?: string;
+          phase?: string;
+          day?: string;
+          timeStart?: string;
+          timeEnd?: string;
+          isCustomRange?: boolean;
+          dateFrom?: string;
+          dateTo?: string;
+        }
+        const slots = JSON.parse(rawSlots) as LocalScheduleSlot[];
+
+        const now = new Date();
+        const currentHHMM = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+
+        // Key to prevent duplicate fires within the same minute
+        const currentMinuteKey = `${now.toDateString()}_${currentHHMM}`;
+        if (currentMinuteKey === lastNotifiedKey) return;
+
+        const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        const todayDayName = days[now.getDay()];
+        const todayDateStr = now.toISOString().split('T')[0];
+
+        // Find if any slot is starting now
+        const activeSlot = slots.find((s) => {
+          if (s.timeStart !== currentHHMM) return false;
+
+          // Check date/day constraints
+          if (s.isCustomRange) {
+            if (s.dateFrom && todayDateStr < s.dateFrom) return false;
+            if (s.dateTo && todayDateStr > s.dateTo) return false;
+          } else {
+            if (s.day && s.day.toLowerCase() !== todayDayName) return false;
+          }
+          return true;
+        });
+
+        if (activeSlot) {
+          lastNotifiedKey = currentMinuteKey;
+
+          const title = 'Study Session Starting! 📚';
+          const body = `${activeSlot.subject}${activeSlot.chapter ? ` - ${activeSlot.chapter}` : ''} starts now.`;
+
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.ready
+              .then((registration) => {
+                registration.showNotification(title, {
+                  body: body,
+                  icon: '/logo.png',
+                  badge: '/favicon.svg',
+                  vibrate: [200, 100, 200],
+                } as NotificationOptions & { vibrate?: number[]; badge?: string });
+              })
+              .catch(() => {
+                new Notification(title, { body });
+              });
+          } else {
+            new Notification(title, { body });
+          }
+        }
+      } catch (err) {
+        console.warn('Error checking schedule slots for notification:', err);
+      }
+    };
+
+    // Check immediately and then every 30 seconds
+    checkScheduleSlots();
+    const interval = setInterval(checkScheduleSlots, 30000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   const handleUpdateCaLevel = async (level: string) => {
     setCaLevel(level);
     if (session?.user) {
@@ -228,6 +337,16 @@ function App() {
         data: { study_hours_target: target }
       });
       if (error) console.error('Error updating target hours metadata:', error.message);
+    }
+  };
+
+  const handleUpdateFullName = async (name: string) => {
+    setFullName(name);
+    if (session?.user) {
+      const { error } = await supabase.auth.updateUser({
+        data: { full_name: name }
+      });
+      if (error) console.error('Error updating full name metadata:', error.message);
     }
   };
 
@@ -440,11 +559,14 @@ function App() {
             {activeTab === 'home' && (
               <Dashboard
                 userEmail={session.user.email || 'CA Student'}
+                userFullName={fullName}
                 caLevel={caLevel}
                 studyTarget={studyTarget}
                 totalHours={totalHours}
                 onStartSession={() => setActiveTab('planner')}
                 progressState={progressState}
+                slots={slots}
+                setSlots={setSlots}
               />
             )}
             {activeTab === 'subjects' && (
@@ -467,10 +589,20 @@ function App() {
               <Planner
                 onAddStudyHours={handleAddStudyHours}
                 caLevel={caLevel}
+                tasks={tasks}
+                setTasks={setTasks}
               />
             )}
             {activeTab === 'analytics' && (
-              <Analytics totalHours={totalHours} />
+              <Analytics 
+                totalHours={totalHours} 
+                progressState={progressState}
+                onToggleRevisionCycle={handleToggleRevisionCycle}
+                revisions={revisions}
+                setRevisions={setRevisions}
+                mistakes={mistakes}
+                setMistakes={setMistakes}
+              />
             )}
             {activeTab === 'profile' && (
               <Profile
@@ -480,6 +612,7 @@ function App() {
                 studyTarget={studyTarget}
                 setStudyTarget={handleUpdateStudyTarget}
                 onLogout={handleLogout}
+                onUpdateFullName={handleUpdateFullName}
               />
             )}
           </>
