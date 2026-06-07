@@ -159,6 +159,7 @@ function App() {
   const [sleepHistory, setSleepHistory] = useState<Record<string, string>>(() => loadFromStorage('cand_sleepHistory', {}));
   const [studyLogs, setStudyLogs] = useState<StudyLog[]>(() => loadFromStorage('cand_studyLogs', []));
   const [isTimerFullscreen, setIsTimerFullscreen] = useState(false);
+  const [isChartFullscreen, setIsChartFullscreen] = useState(false);
   const [stickyTimerVisible, setStickyTimerVisible] = useState(false);
 
   // ---- Lifted Pomodoro Timer State (persists across tab switches) ----
@@ -951,6 +952,8 @@ function App() {
                 sleepHistory={sleepHistory}
                 isTimerFullscreen={isTimerFullscreen}
                 setIsTimerFullscreen={setIsTimerFullscreen}
+                isChartFullscreen={isChartFullscreen}
+                setIsChartFullscreen={setIsChartFullscreen}
                 studyLogs={studyLogs}
                 onDeleteStudyLog={handleDeleteStudyLog}
                 onResetDailyTotal={handleResetDailyTotal}
@@ -1035,8 +1038,8 @@ function App() {
         </div>
       )}
 
-      {/* bottom navigation bar visible only when authorized */}
-      {session && (
+      {/* bottom navigation bar visible only when authorized and not in fullscreen mode */}
+      {session && !isTimerFullscreen && !isChartFullscreen && (
         <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
       )}
 

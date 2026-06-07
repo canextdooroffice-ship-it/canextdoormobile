@@ -52,6 +52,8 @@ interface PlannerProps {
   sleepHistory: Record<string, string>;
   isTimerFullscreen: boolean;
   setIsTimerFullscreen: (fullscreen: boolean) => void;
+  isChartFullscreen: boolean;
+  setIsChartFullscreen: (fullscreen: boolean) => void;
   studyLogs: StudyLog[];
   onDeleteStudyLog: (logId: string) => void;
   onResetDailyTotal: (date: string) => void;
@@ -520,13 +522,14 @@ export const Planner: React.FC<PlannerProps> = ({
   sleepHistory,
   isTimerFullscreen,
   setIsTimerFullscreen,
+  isChartFullscreen,
+  setIsChartFullscreen,
   studyLogs,
   onDeleteStudyLog,
   onResetDailyTotal,
 }) => {
   const [plannerTab, setPlannerTab] = useState<'tasks' | 'timer'>('tasks');
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
-  const [isChartFullscreen, setIsChartFullscreen] = useState(false);
   const [isTrendCollapsed, setIsTrendCollapsed] = useState(false);
   const [chartRange, setChartRange] = useState<7 | 15 | 30>(30);
   const [chartMode, setChartMode] = useState<'days' | 'month'>('days');
