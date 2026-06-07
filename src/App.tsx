@@ -14,7 +14,7 @@ import { Subjects } from './components/Subjects';
 import { SYLLABUS_DATA } from './constants/syllabus';
 import type { ProgressState } from './components/Subjects';
 import type { ScheduleSlot } from './components/Dashboard';
-import type { Task } from './components/Planner';
+import type { Task, StudyLog } from './components/Planner';
 import type { RevisionItem, Mistake } from './components/Analytics';
 
 // ---- localStorage persistence keys ----
@@ -127,8 +127,39 @@ function App() {
   const [tasks, setTasks] = useState<Task[]>(() => loadFromStorage(LS_KEYS.TASKS, []));
   const [revisions, setRevisions] = useState<RevisionItem[]>(() => loadFromStorage(LS_KEYS.REVISIONS, []));
   const [mistakes, setMistakes] = useState<Mistake[]>(() => loadFromStorage(LS_KEYS.MISTAKES, []));
-  const [streakCount, setStreakCount] = useState<number>(0);
-  const [checkedInToday, setCheckedInToday] = useState<boolean>(false);
+  const [streakCount, setStreakCount] = useState<number>(() => loadFromStorage(LS_KEYS.STREAK_COUNT, 0));
+  const [checkedInToday, setCheckedInToday] = useState<boolean>(() => {
+    // Reset check-in flag if it's a new day
+    const lastCheckInDate = loadFromStorage<string>('cand_lastCheckInDate', '');
+    const today = new Date().toISOString().split('T')[0];
+    if (lastCheckInDate !== today) {
+      return false;
+    }
+    return loadFromStorage(LS_KEYS.CHECKED_IN_TODAY, false);
+  });
+
+  // Dark mode state
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem('cand_darkMode');
+      if (stored !== null) return JSON.parse(stored);
+    } catch { /* ignore */ }
+    return false;
+  });
+
+  useEffect(() => {
+    document.body.classList.toggle('dark', darkMode);
+    localStorage.setItem('cand_darkMode', JSON.stringify(darkMode));
+  }, [darkMode]);
+
+  // Study history & planner states
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [studyHistory, setStudyHistory] = useState<Record<string, number>>(() => loadFromStorage('cand_studyHistory', {}));
+  const [wakeHistory, setWakeHistory] = useState<Record<string, string>>(() => loadFromStorage('cand_wakeHistory', {}));
+  const [sleepHistory, setSleepHistory] = useState<Record<string, string>>(() => loadFromStorage('cand_sleepHistory', {}));
+  const [studyLogs, setStudyLogs] = useState<StudyLog[]>(() => loadFromStorage('cand_studyLogs', []));
+  const [isTimerFullscreen, setIsTimerFullscreen] = useState(false);
+  const [stickyTimerVisible, setStickyTimerVisible] = useState(false);
 
   // ---- Lifted Pomodoro Timer State (persists across tab switches) ----
   const [timerTimeLeft, setTimerTimeLeft] = useState(25 * 60);
@@ -198,8 +229,14 @@ function App() {
     if (!timerRunning && 'Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission().catch(() => {});
     }
-    setTimerRunning(r => !r);
-  }, [timerRunning]);
+    setTimerRunning((prev) => {
+      if (!prev) {
+        // Starting the timer — make sticky visible
+        setStickyTimerVisible(true);
+      }
+      return !prev;
+    });
+  }, []);
 
   const handleTimerReset = useCallback(() => {
     setTimerRunning(false);
@@ -218,8 +255,8 @@ function App() {
     return 'PAUSED';
   }, [timerRunning, timerType, timerTimeLeft, timerPreset]);
 
-  // Whether to show the sticky mini-timer (when timer is running or paused mid-session)
-  const showStickyTimer = timerRunning || (timerTimeLeft < parseInt(timerPreset, 10) * 60);
+  // Whether to show the sticky mini-timer (explicit flag, but NOT in fullscreen)
+  const showStickyTimer = !isTimerFullscreen && stickyTimerVisible;
 
   // Persist all state changes to localStorage
   useEffect(() => { saveToStorage(LS_KEYS.PROGRESS, progressState); }, [progressState]);
@@ -236,6 +273,13 @@ function App() {
   useEffect(() => { saveToStorage(LS_KEYS.TASKS, tasks); }, [tasks]);
   useEffect(() => { saveToStorage(LS_KEYS.REVISIONS, revisions); }, [revisions]);
   useEffect(() => { saveToStorage(LS_KEYS.MISTAKES, mistakes); }, [mistakes]);
+  useEffect(() => { saveToStorage(LS_KEYS.STREAK_COUNT, streakCount); }, [streakCount]);
+  useEffect(() => {
+    saveToStorage(LS_KEYS.CHECKED_IN_TODAY, checkedInToday);
+    if (checkedInToday) {
+      saveToStorage('cand_lastCheckInDate', new Date().toISOString().split('T')[0]);
+    }
+  }, [checkedInToday]);
 
 
 
@@ -511,11 +555,90 @@ function App() {
     }
   };
 
-  const handleAddStudyHours = (hours: number) => {
-    // Add logged study hours to session total and today's hours
+  const handleAddStudyHours = useCallback((hours: number, label?: string) => {
+    const dateStr = selectedDate;
     setTotalHours((prev) => parseFloat((prev + hours).toFixed(1)));
     setTodayHours((prev) => parseFloat((prev + hours).toFixed(1)));
+    // Update study history for the date
+    setStudyHistory((prev) => {
+      const updated = { ...prev, [dateStr]: parseFloat(((prev[dateStr] || 0) + hours).toFixed(1)) };
+      localStorage.setItem('cand_studyHistory', JSON.stringify(updated));
+      return updated;
+    });
+    // Create a study log entry
+    const newLog: StudyLog = {
+      id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 9),
+      date: dateStr,
+      hours,
+      label: label || 'Study Session',
+      timestamp: new Date().toISOString(),
+    };
+    setStudyLogs((prev) => {
+      const updated = [newLog, ...prev];
+      localStorage.setItem('cand_studyLogs', JSON.stringify(updated));
+      return updated;
+    });
+  }, [selectedDate]);
+
+  const handleUpdateWakeTime = (time: string) => {
+    setWakeHistory((prev) => {
+      const updated = { ...prev, [selectedDate]: time };
+      localStorage.setItem('cand_wakeHistory', JSON.stringify(updated));
+      return updated;
+    });
   };
+
+  const handleUpdateSleepTime = (time: string) => {
+    setSleepHistory((prev) => {
+      const updated = { ...prev, [selectedDate]: time };
+      localStorage.setItem('cand_sleepHistory', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const handleDeleteStudyLog = useCallback((logId: string) => {
+    setStudyLogs((prev) => {
+      const log = prev.find((l) => l.id === logId);
+      if (log) {
+        // Subtract hours from history and totals
+        setStudyHistory((h) => {
+          const updated = { ...h, [log.date]: parseFloat(((h[log.date] || 0) - log.hours).toFixed(1)) };
+          if (updated[log.date] <= 0) delete updated[log.date];
+          localStorage.setItem('cand_studyHistory', JSON.stringify(updated));
+          return updated;
+        });
+        const today = new Date().toISOString().split('T')[0];
+        if (log.date === today) {
+          setTodayHours((prev) => Math.max(0, parseFloat((prev - log.hours).toFixed(1))));
+        }
+        setTotalHours((prev) => Math.max(0, parseFloat((prev - log.hours).toFixed(1))));
+      }
+      const updated = prev.filter((l) => l.id !== logId);
+      localStorage.setItem('cand_studyLogs', JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
+  const handleResetDailyTotal = useCallback((date: string) => {
+    setStudyLogs((prev) => {
+      const logsForDate = prev.filter((l) => l.date === date);
+      const totalForDate = logsForDate.reduce((sum, l) => sum + l.hours, 0);
+      setStudyHistory((h) => {
+        const updated = { ...h };
+        delete updated[date];
+        localStorage.setItem('cand_studyHistory', JSON.stringify(updated));
+        return updated;
+      });
+      const today = new Date().toISOString().split('T')[0];
+      if (date === today) {
+        setTodayHours(0);
+      }
+      setTotalHours((prev) => Math.max(0, parseFloat((prev - totalForDate).toFixed(1))));
+      const updated = prev.filter((l) => l.date !== date);
+      localStorage.setItem('cand_studyLogs', JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
 
   const handleToggleClass = (subName: string, chapName: string) => {
     setProgressState((prev) => {
@@ -740,6 +863,8 @@ function App() {
                 setStreakCount={setStreakCount}
                 checkedInToday={checkedInToday}
                 setCheckedInToday={setCheckedInToday}
+                darkMode={darkMode}
+                onToggleDarkMode={() => setDarkMode(prev => !prev)}
               />
             )}
             {activeTab === 'subjects' && (
@@ -778,6 +903,22 @@ function App() {
                 formatTimerDisplay={formatTimerDisplay}
                 timerStudyLabel={timerStudyLabel}
                 setTimerStudyLabel={setTimerStudyLabel}
+                progressState={progressState}
+                studyTarget={studyTarget}
+                setStudyTarget={handleUpdateStudyTarget}
+                studyHistory={studyHistory}
+                selectedDate={selectedDate}
+                setSelectedDate={setSelectedDate}
+                wakeTime={wakeHistory[selectedDate] ?? ''}
+                setWakeTime={handleUpdateWakeTime}
+                sleepTime={sleepHistory[selectedDate] ?? ''}
+                setSleepTime={handleUpdateSleepTime}
+                sleepHistory={sleepHistory}
+                isTimerFullscreen={isTimerFullscreen}
+                setIsTimerFullscreen={setIsTimerFullscreen}
+                studyLogs={studyLogs}
+                onDeleteStudyLog={handleDeleteStudyLog}
+                onResetDailyTotal={handleResetDailyTotal}
               />
             )}
             {activeTab === 'analytics' && (
@@ -850,7 +991,7 @@ function App() {
             <button 
               type="button" 
               className="mini-timer-btn close-btn" 
-              onClick={() => { setTimerRunning(false); setTimerTimeLeft(parseInt(timerPreset, 10) * 60); }}
+              onClick={() => { setTimerRunning(false); setTimerTimeLeft(parseInt(timerPreset, 10) * 60); setStickyTimerVisible(false); }}
               title="Close"
             >
               <X size={16} />

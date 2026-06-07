@@ -70,6 +70,7 @@ export const Subjects: React.FC<SubjectsProps> = ({
   const [priorityFilter, setPriorityFilter] = useState<'ALL' | 'A' | 'B' | 'C'>('ALL');
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [showPriorityDropdown, setShowPriorityDropdown] = useState(false);
   const [editingVideo, setEditingVideo] = useState<{ subName: string; chapName: string; url: string } | null>(null);
 
   const [activeLdrNote, setActiveLdrNote] = useState<{
@@ -77,6 +78,12 @@ export const Subjects: React.FC<SubjectsProps> = ({
     chapName: string;
     notes: string;
     ldrs: boolean;
+  } | null>(null);
+
+  const [confirmDelete, setConfirmDelete] = useState<{
+    type: 'subject' | 'chapter';
+    subName: string;
+    chapName?: string;
   } | null>(null);
 
   const handleLdrClick = (subName: string, chapName: string) => {
@@ -223,7 +230,10 @@ export const Subjects: React.FC<SubjectsProps> = ({
               <button
                 type="button"
                 className="status-dropdown-trigger"
-                onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+                onClick={() => {
+                  setShowStatusDropdown(!showStatusDropdown);
+                  setShowPriorityDropdown(false);
+                }}
               >
                 <CheckCircle size={16} className="status-icon" />
                 <span>Status</span>
@@ -284,19 +294,48 @@ export const Subjects: React.FC<SubjectsProps> = ({
               )}
             </div>
 
-            {/* Priority Filter Select Pill */}
-            <div className="priority-select-wrapper">
-              <Filter size={13} className="priority-select-icon" />
-              <select
-                value={priorityFilter}
-                onChange={(e) => setPriorityFilter(e.target.value as 'ALL' | 'A' | 'B' | 'C')}
-                className="priority-pill-select"
+            {/* Priority Dropdown */}
+            <div className="status-dropdown-wrapper">
+              <button
+                type="button"
+                className="status-dropdown-trigger"
+                onClick={() => {
+                  setShowPriorityDropdown(!showPriorityDropdown);
+                  setShowStatusDropdown(false);
+                }}
               >
-                <option value="ALL">All Priorities</option>
-                <option value="A">Priority A</option>
-                <option value="B">Priority B</option>
-                <option value="C">Priority C</option>
-              </select>
+                <Filter size={16} className="status-icon" />
+                <span>{priorityFilter === 'ALL' ? 'All Priorities' : `Priority ${priorityFilter}`}</span>
+                <ChevronDown size={14} className="chevron-icon" />
+              </button>
+
+              {showPriorityDropdown && (
+                <>
+                  <div className="dropdown-overlay" onClick={() => setShowPriorityDropdown(false)} />
+                  <div className="status-dropdown-popover">
+                    {(['ALL', 'A', 'B', 'C'] as const).map((p) => (
+                      <label 
+                        key={p} 
+                        className="status-popover-item" 
+                      >
+                        <input
+                          type="radio"
+                          name="priority-filter"
+                          checked={priorityFilter === p}
+                          onChange={() => {
+                            setPriorityFilter(p);
+                            setShowPriorityDropdown(false);
+                          }}
+                          className="status-popover-radio"
+                        />
+                        <span className="status-popover-label">
+                          {p === 'ALL' ? 'All Priorities' : `Priority ${p}`}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -484,9 +523,10 @@ export const Subjects: React.FC<SubjectsProps> = ({
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (confirm(`Delete subject "${subName}" and all its chapters?`)) {
-                        onDeleteSubject(subName);
-                      }
+                      setConfirmDelete({
+                        type: 'subject',
+                        subName
+                      });
                     }}
                     className="subject-delete-btn"
                     title="Delete Subject"
@@ -540,9 +580,11 @@ export const Subjects: React.FC<SubjectsProps> = ({
                             <button
                               type="button"
                               onClick={() => {
-                                if (confirm(`Delete chapter "${chap}"?`)) {
-                                  onDeleteChapter(subName, chap);
-                                }
+                                setConfirmDelete({
+                                  type: 'chapter',
+                                  subName,
+                                  chapName: chap
+                                });
                               }}
                               className="chapter-card-delete"
                               title="Delete Chapter"
@@ -692,6 +734,51 @@ export const Subjects: React.FC<SubjectsProps> = ({
                 className="modal-action-btn cancel"
               >
                 <span>Close</span>
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {confirmDelete && createPortal(
+        <div className="modal-overlay fade-in" onClick={() => setConfirmDelete(null)}>
+          <div className="modal-content slide-up" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">
+              {confirmDelete.type === 'subject' ? 'Delete Subject' : 'Delete Chapter'}
+            </h3>
+            <p className="modal-subtitle" style={{ marginTop: '8px', fontSize: '13.5px', lineHeight: '1.5' }}>
+              {confirmDelete.type === 'subject' ? (
+                <>Are you sure you want to delete subject <strong>"{confirmDelete.subName}"</strong> and all its chapters? This action cannot be undone.</>
+              ) : (
+                <>Are you sure you want to delete chapter <strong>"{confirmDelete.chapName}"</strong> from subject <strong>"{confirmDelete.subName}"</strong>?</>
+              )}
+            </p>
+            
+            <div className="modal-actions-row mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirmDelete.type === 'subject') {
+                    onDeleteSubject(confirmDelete.subName);
+                    showToast(`Deleted subject "${confirmDelete.subName}"`, 'success');
+                  } else if (confirmDelete.type === 'chapter' && confirmDelete.chapName) {
+                    onDeleteChapter(confirmDelete.subName, confirmDelete.chapName);
+                    showToast(`Deleted chapter "${confirmDelete.chapName}"`, 'success');
+                  }
+                  setConfirmDelete(null);
+                }}
+                className="modal-action-btn delete-confirm"
+              >
+                <span>Delete</span>
+              </button>
+              
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(null)}
+                className="modal-action-btn cancel"
+              >
+                <span>Cancel</span>
               </button>
             </div>
           </div>

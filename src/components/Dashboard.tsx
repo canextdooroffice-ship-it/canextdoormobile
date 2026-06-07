@@ -1,8 +1,9 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Flame, Calendar, Target, Timer, Check, Trash2, X, Clock, Plus } from 'lucide-react';
+import { Flame, Calendar, Target, Timer, Check, Trash2, X, Clock, Plus, Sun, Moon } from 'lucide-react';
 import { SYLLABUS_DATA } from '../constants/syllabus';
 import type { ProgressState } from './Subjects';
+import { CustomSelect } from './CustomSelect';
 
 export interface ScheduleSlot {
   id: string;
@@ -34,6 +35,8 @@ interface DashboardProps {
   setStreakCount: React.Dispatch<React.SetStateAction<number>>;
   checkedInToday: boolean;
   setCheckedInToday: React.Dispatch<React.SetStateAction<boolean>>;
+  darkMode: boolean;
+  onToggleDarkMode: () => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -53,6 +56,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
   setStreakCount,
   checkedInToday,
   setCheckedInToday,
+  darkMode,
+  onToggleDarkMode,
 }) => {
   // Extract user alias from real name or email fallback
   const userAlias = userFullName || (userEmail ? userEmail.split('@')[0] : 'Student');
@@ -342,6 +347,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <h2 className="welcome-title">Hi, {userAlias}!</h2>
           <p className="welcome-subtitle">Crack the exam one page at a time.</p>
         </div>
+        <button
+          type="button"
+          onClick={onToggleDarkMode}
+          className="theme-toggle-btn"
+          aria-label="Toggle dark mode"
+        >
+          {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
       </div>
 
 
@@ -466,31 +479,21 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <form onSubmit={handleSaveSlot} className="schedule-inline-form">
               <div className="form-group">
                 <label>Subject</label>
-                <select 
-                  value={newSlotSubject} 
-                  onChange={(e) => handleSubjectChange(e.target.value)}
-                  className="styled-select"
-                  required
-                >
-                  <option value="">Select Subject</option>
-                  {subjectsList.map((sub, idx) => (
-                    <option key={idx} value={sub}>{sub}</option>
-                  ))}
-                </select>
+                <CustomSelect
+                  value={newSlotSubject}
+                  onChange={handleSubjectChange}
+                  options={subjectsList}
+                  placeholder="Select Subject"
+                />
               </div>
               <div className="form-group">
                 <label>Chapter</label>
-                <select 
-                  value={newSlotChapter} 
-                  onChange={(e) => setNewSlotChapter(e.target.value)}
-                  className="styled-select"
-                  required
-                >
-                  <option value="">Select Chapter</option>
-                  {getSubjectChapters(newSlotSubject).map((chap, idx) => (
-                    <option key={idx} value={chap}>{chap}</option>
-                  ))}
-                </select>
+                <CustomSelect
+                  value={newSlotChapter}
+                  onChange={setNewSlotChapter}
+                  options={getSubjectChapters(newSlotSubject)}
+                  placeholder="Select Chapter"
+                />
               </div>
               <div className="form-time-row">
                 <div className="form-group">
@@ -854,31 +857,21 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <form onSubmit={handleSaveSlotFromModal} className="schedule-inline-form mt-2">
               <div className="form-group">
                 <label>Subject</label>
-                <select 
-                  value={newSlotSubject} 
-                  onChange={(e) => handleSubjectChange(e.target.value)}
-                  className="styled-select"
-                  required
-                >
-                  <option value="">Select Subject</option>
-                  {subjectsList.map((sub, idx) => (
-                    <option key={idx} value={sub}>{sub}</option>
-                  ))}
-                </select>
+                <CustomSelect
+                  value={newSlotSubject}
+                  onChange={handleSubjectChange}
+                  options={subjectsList}
+                  placeholder="Select Subject"
+                />
               </div>
               <div className="form-group">
                 <label>Chapter</label>
-                <select 
-                  value={newSlotChapter} 
-                  onChange={(e) => setNewSlotChapter(e.target.value)}
-                  className="styled-select"
-                  required
-                >
-                  <option value="">Select Chapter</option>
-                  {getSubjectChapters(newSlotSubject).map((chap, idx) => (
-                    <option key={idx} value={chap}>{chap}</option>
-                  ))}
-                </select>
+                <CustomSelect
+                  value={newSlotChapter}
+                  onChange={setNewSlotChapter}
+                  options={getSubjectChapters(newSlotSubject)}
+                  placeholder="Select Chapter"
+                />
               </div>
               <div className="form-time-row">
                 <div className="form-group">

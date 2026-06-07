@@ -1,6 +1,7 @@
 import React from 'react';
 import { LogOut, ShieldAlert, Settings, Briefcase, Clock, Layers, Copy, CheckCircle, Calendar } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import { CustomSelect } from './CustomSelect';
 
 interface ProfileProps {
   showToast: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
@@ -154,6 +155,15 @@ export const Profile: React.FC<ProfileProps> = ({
 
   return (
     <div className="profile-redesign-container fade-in">
+      {/* Page Header */}
+      <div className="welcome-banner">
+        <div>
+          <span className="level-badge">Your Account</span>
+          <h2 className="welcome-title">Profile</h2>
+          <p className="welcome-subtitle">Manage your settings and preferences.</p>
+        </div>
+      </div>
+
       <form onSubmit={handleSave} className="profile-redesign-form">
         {/* SECTION 1: Personal Information */}
         <div className="profile-section-card">
@@ -192,16 +202,16 @@ export const Profile: React.FC<ProfileProps> = ({
           <div className="profile-form-grid mt-3">
             <div className="input-group">
               <label>Course Level</label>
-              <select 
-                value={courseLevel} 
-                onChange={(e) => setCourseLevel(e.target.value)}
+              <CustomSelect
+                value={courseLevel}
+                onChange={setCourseLevel}
+                options={[
+                  { value: 'Foundation', label: 'CA Foundation' },
+                  { value: 'Intermediate', label: 'CA Intermediate' },
+                  { value: 'Final', label: 'CA Final' }
+                ]}
                 className="styled-select-field"
-                required
-              >
-                <option value="Foundation">CA Foundation</option>
-                <option value="Intermediate">CA Intermediate</option>
-                <option value="Final">CA Final</option>
-              </select>
+              />
             </div>
 
             <div className="input-group">
@@ -247,32 +257,17 @@ export const Profile: React.FC<ProfileProps> = ({
             </div>
           </div>
 
-          <div className="profile-form-grid mt-3">
-            <div className="input-group relative">
-              <label>Exam Start Date</label>
-              <div className="date-input-wrapper">
-                <input 
-                  type="date" 
-                  value={examStartDate} 
-                  onChange={(e) => setExamStartDate(e.target.value)}
-                  className="styled-date-input-field" 
-                  required
-                />
-                <Calendar size={14} className="date-field-icon" />
-              </div>
-            </div>
-
-            <div className="input-group">
-              <label>Daily Study Target (Hours)</label>
+          <div className="input-group mt-3 relative">
+            <label>Exam Start Date</label>
+            <div className="date-input-wrapper">
               <input 
-                type="number" 
-                value={studyTarget} 
-                onChange={(e) => setLocalStudyTarget(Math.max(1, Math.min(24, parseInt(e.target.value, 10) || 0)))}
-                className="styled-text-input-field" 
-                min="1"
-                max="24"
+                type="date" 
+                value={examStartDate} 
+                onChange={(e) => setExamStartDate(e.target.value)}
+                className="styled-date-input-field" 
                 required
               />
+              <Calendar size={14} className="date-field-icon" />
             </div>
           </div>
         </div>
@@ -294,7 +289,6 @@ export const Profile: React.FC<ProfileProps> = ({
                 value={articleshipStartDate} 
                 onChange={(e) => setArticleshipStartDate(e.target.value)}
                 className="styled-date-input-field" 
-                required
               />
               <Calendar size={14} className="date-field-icon" />
             </div>
@@ -309,7 +303,6 @@ export const Profile: React.FC<ProfileProps> = ({
                 onChange={(e) => setAllowedLeaves(Math.max(0, parseInt(e.target.value) || 0))}
                 className="styled-text-input-field"
                 min="0"
-                required
               />
             </div>
 
@@ -321,7 +314,6 @@ export const Profile: React.FC<ProfileProps> = ({
                 onChange={(e) => setLeavesTaken(Math.max(0, parseInt(e.target.value) || 0))}
                 className="styled-text-input-field"
                 min="0"
-                required
               />
             </div>
           </div>
@@ -390,7 +382,7 @@ export const Profile: React.FC<ProfileProps> = ({
         </button>
         <div className="profile-pwa-license">
           <ShieldAlert size={12} className="license-icon" />
-          <span>CA Next Door Aspirant Hub v1.2.0 • Secured Local cache</span>
+          <span>CA Next Door</span>
         </div>
       </div>
     </div>

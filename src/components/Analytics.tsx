@@ -1,6 +1,6 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Target, Plus, Trash2, X, Calendar, Check, Layers, Search, BookOpen, AlertCircle } from 'lucide-react';
+import { Target, Plus, Trash2, X, Calendar, Check, Layers, Search, AlertCircle } from 'lucide-react';
 import type { ProgressState } from './Subjects';
 import { SYLLABUS_DATA } from '../constants/syllabus';
 
@@ -222,19 +222,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
     );
   }, [mistakes, drillSubject, drillChapter, drillCategory]);
 
-  const getCellBgColor = (count: number) => {
-    if (count <= 0) return 'transparent';
-    if (count === 1) return 'rgba(99, 102, 241, 0.12)';
-    if (count === 2) return 'rgba(99, 102, 241, 0.35)';
-    if (count === 3) return 'rgba(99, 102, 241, 0.6)';
-    return 'rgba(99, 102, 241, 0.85)';
-  };
 
-  const getCellTextColor = (count: number) => {
-    if (count <= 0) return 'transparent';
-    if (count >= 3) return '#ffffff';
-    return '#4f46e5';
-  };
 
   // ==========================================
   // REVISION PLANNER LOGIC
@@ -289,6 +277,12 @@ export const Analytics: React.FC<AnalyticsProps> = ({
     return Math.round(diffTime / (1000 * 60 * 60 * 24));
   }, []);
 
+  const getRequirementLevel = React.useCallback((req: string) => {
+    if (req === 'REV3') return 3;
+    if (req === 'REV2') return 2;
+    return 1;
+  }, []);
+
   const revisionStats = React.useMemo(() => {
     let late = 0;
     let todayCount = 0;
@@ -299,6 +293,9 @@ export const Analytics: React.FC<AnalyticsProps> = ({
       // Filter out orphaned revisions
       if (!activeSubjects.includes(r.subjectName)) return;
       if (!progressState[r.subjectName]?.[r.chapterName]) return;
+      // Auto-hide if the Subjects page revisionCycle already covers this requirement
+      const currentCycle = progressState[r.subjectName]?.[r.chapterName]?.revisionCycle || 0;
+      if (currentCycle >= getRequirementLevel(r.requirement)) return;
 
       const diff = getDaysDiff(todayStr, r.dueDate);
       if (diff > 0) {
@@ -311,7 +308,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
     });
 
     return { late, todayCount, upcoming };
-  }, [revisions, activeSubjects, progressState, todayStr, getDaysDiff]);
+  }, [revisions, activeSubjects, progressState, todayStr, getDaysDiff, getRequirementLevel]);
 
   const filteredRevisions = React.useMemo(() => {
     return revisions.filter((r) => {
@@ -319,6 +316,9 @@ export const Analytics: React.FC<AnalyticsProps> = ({
       // Filter out orphaned revisions
       if (!activeSubjects.includes(r.subjectName)) return false;
       if (!progressState[r.subjectName]?.[r.chapterName]) return false;
+      // Auto-hide if the Subjects page revisionCycle already covers this requirement
+      const currentCycle = progressState[r.subjectName]?.[r.chapterName]?.revisionCycle || 0;
+      if (currentCycle >= getRequirementLevel(r.requirement)) return false;
 
       if (revisionSubjectFilter !== 'All' && r.subjectName !== revisionSubjectFilter) {
         return false;
@@ -338,24 +338,40 @@ export const Analytics: React.FC<AnalyticsProps> = ({
     }).sort((a, b) => {
       return a.dueDate.localeCompare(b.dueDate);
     });
-  }, [revisions, activeSubjects, progressState, revisionSubjectFilter, revisionSearchQuery, activeQueueTab, todayStr, getDaysDiff]);
+  }, [revisions, activeSubjects, progressState, revisionSubjectFilter, revisionSearchQuery, activeQueueTab, todayStr, getDaysDiff, getRequirementLevel]);
 
   const handleCompleteRevision = (id: string) => {
     const item = revisions.find((r) => r.id === id);
     if (!item) return;
 
+    const cycleNumber = item.requirement === 'REV3' ? 3 : item.requirement === 'REV2' ? 2 : 1;
+    const currentCycle = progressState[item.subjectName]?.[item.chapterName]?.revisionCycle || 0;
+
+    if (currentCycle >= cycleNumber) {
+      showToast(`${item.requirement} already done for "${item.chapterName}" on Subjects page!`, 'info');
+    }
+
     setRevisions((prev) =>
       prev.map((r) => (r.id === id ? { ...r, completed: true, completedAt: new Date().toISOString() } : r))
     );
 
-    const cycleNumber = item.requirement === 'REV3' ? 3 : item.requirement === 'REV2' ? 2 : 1;
-    onToggleRevisionCycle(item.subjectName, item.chapterName, cycleNumber);
+    if (currentCycle < cycleNumber) {
+      onToggleRevisionCycle(item.subjectName, item.chapterName, cycleNumber);
+      showToast(`${item.requirement} marked complete — Subjects page updated!`, 'success');
+    }
   };
 
   const handleSaveRevision = (e: React.FormEvent) => {
     e.preventDefault();
     if (!addSubject || !addChapter) {
       showToast('Please select a subject and chapter.', 'error');
+      return;
+    }
+    // Block adding if the revision cycle is already done on Subjects page
+    const reqLevel = getRequirementLevel(addRequirement);
+    const currentCycle = progressState[addSubject]?.[addChapter]?.revisionCycle || 0;
+    if (currentCycle >= reqLevel) {
+      showToast(`${addRequirement} is already marked complete for "${addChapter}" on Subjects page!`, 'info');
       return;
     }
     const newItem: RevisionItem = {
@@ -368,6 +384,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
     };
     setRevisions((prev) => [newItem, ...prev]);
     setIsAddRevisionModalOpen(false);
+    showToast(`${addRequirement} revision added for "${addChapter}"`, 'success');
   };
 
   const formatDate = (isoString: string) => {
@@ -381,9 +398,18 @@ export const Analytics: React.FC<AnalyticsProps> = ({
 
   return (
     <div className="analytics-container fade-in">
+      {/* Page Header */}
+      <div className="welcome-banner">
+        <div>
+          <span className="level-badge">Performance Insights</span>
+          <h2 className="welcome-title">Analytics</h2>
+          <p className="welcome-subtitle">Track mistakes, plan revisions, and master your prep.</p>
+        </div>
+      </div>
+
       {/* ERROR DENSITY MATRIX (Mistake Book) */}
       <div className="analytics-card error-density-card">
-        <div className="matrix-header-row">
+        <div className="matrix-header-row flex-col-mobile">
           <div>
             <div className="matrix-title-wrap">
               <Target className="matrix-title-icon" size={20} />
@@ -418,9 +444,9 @@ export const Analytics: React.FC<AnalyticsProps> = ({
           
           <div className="matrix-frequency-key">
             <span className="key-label">LOW FREQUENCY</span>
-            <div className="key-block" style={{ backgroundColor: getCellBgColor(1) }} />
-            <div className="key-block" style={{ backgroundColor: getCellBgColor(2) }} />
-            <div className="key-block" style={{ backgroundColor: getCellBgColor(3) }} />
+            <div className="key-block count-1" />
+            <div className="key-block count-2" />
+            <div className="key-block count-3" />
             <span className="key-label">HIGH FREQUENCY</span>
           </div>
         </div>
@@ -430,10 +456,22 @@ export const Analytics: React.FC<AnalyticsProps> = ({
             <div className="matrix-grid-table">
               {/* Header Row */}
               <div className="matrix-grid-row header">
-                <div className="matrix-grid-col label-col">SUBJECT & CHAPTER</div>
-                {MISTAKE_CATEGORIES.map((cat) => (
-                  <div key={cat} className="matrix-grid-col cell-col header-cell">{cat.toUpperCase()}</div>
-                ))}
+                <div className="matrix-grid-col label-col header-cell">
+                  <span className="header-cell-full">SUBJECT & CHAPTER</span>
+                  <span className="header-cell-short">SUBJECT</span>
+                </div>
+                {MISTAKE_CATEGORIES.map((cat) => {
+                  const shortLabel = cat === 'Conceptual' ? 'CON' :
+                                     cat === 'Silly' ? 'SIL' :
+                                     cat === 'Misread' ? 'READ' :
+                                     cat === 'Time' ? 'TIME' : 'FORM';
+                  return (
+                    <div key={cat} className="matrix-grid-col cell-col header-cell" title={cat}>
+                      <span className="header-cell-full">{cat.toUpperCase()}</span>
+                      <span className="header-cell-short">{shortLabel}</span>
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Rows */}
@@ -453,6 +491,10 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                     {MISTAKE_CATEGORIES.map((cat) => {
                       const count = getErrorCount(row.subjectName, row.chapterName, cat);
                       const hasCount = count > 0;
+                      const countClass = count === 1 ? 'count-1' :
+                                         count === 2 ? 'count-2' :
+                                         count === 3 ? 'count-3' :
+                                         count >= 4 ? 'count-4' : '';
                       return (
                         <div 
                           key={cat} 
@@ -461,8 +503,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                           {hasCount ? (
                             <button
                               type="button"
-                              className="matrix-cell-box has-errors"
-                              style={{ backgroundColor: getCellBgColor(count), color: getCellTextColor(count) }}
+                              className={`matrix-cell-box has-errors ${countClass}`}
                               onClick={() => handleCellClick(row.subjectName, row.chapterName, cat)}
                             >
                               {count}
@@ -571,7 +612,10 @@ export const Analytics: React.FC<AnalyticsProps> = ({
             <div className="matrix-grid-table revision-table">
               {/* Header */}
               <div className="matrix-grid-row header">
-                <div className="matrix-grid-col rev-col-subject">SUBJECT & CHAPTER</div>
+                <div className="matrix-grid-col rev-col-subject header-cell">
+                  <span className="header-cell-full">SUBJECT & CHAPTER</span>
+                  <span className="header-cell-short">SUBJECT</span>
+                </div>
                 <div className="matrix-grid-col rev-col-req header-cell">REQUIREMENT</div>
                 <div className="matrix-grid-col rev-col-timeline header-cell">TIMELINE</div>
                 <div className="matrix-grid-col rev-col-action header-cell">ACTION</div>
@@ -589,17 +633,10 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                   const diff = getDaysDiff(todayStr, item.dueDate);
                   return (
                     <div key={item.id} className="matrix-grid-row revision-row">
-                      {/* Column 1: Book icon + Chapter name / Subject paper */}
+                      {/* Column 1: Subject badge + Chapter name styled like Error Density Matrix */}
                       <div className="matrix-grid-col rev-col-subject">
-                        <div className="rev-subject-cell-wrap">
-                          <div className="rev-book-icon-badge">
-                            <BookOpen size={15} />
-                          </div>
-                          <div className="rev-subject-text-wrap">
-                            <span className="rev-chapter-title">{item.chapterName}</span>
-                            <span className="rev-subject-subtitle">{getSubjectBadge(item.subjectName)}</span>
-                          </div>
-                        </div>
+                        <span className="subject-paper-badge">{getSubjectBadge(item.subjectName)}</span>
+                        <span className="chapter-label-text">{item.chapterName}</span>
                       </div>
 
                       {/* Column 2: Requirement Badge */}
