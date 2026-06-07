@@ -288,10 +288,10 @@ function App() {
   const hasSyncedRef = useRef(false); // prevent double-load on mount
 
   // Ref to always hold the latest state values for loadCloudData callbacks without stale closure issues
-  const stateRef = useRef({ progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday });
+  const stateRef = useRef({ progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours });
   useEffect(() => {
-    stateRef.current = { progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday };
-  }, [progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday]);
+    stateRef.current = { progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours };
+  }, [progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours]);
 
   // Load cloud data on login (restores progress on new device)
   const loadCloudData = useCallback(async (userId: string) => {
@@ -315,6 +315,11 @@ function App() {
             examStartDate?: string;
             streakCount?: number;
             checkedInToday?: boolean;
+            studyHistory?: Record<string, number>;
+            wakeHistory?: Record<string, string>;
+            sleepHistory?: Record<string, string>;
+            studyLogs?: StudyLog[];
+            todayHours?: number;
             streakMigrated?: boolean;
           };
           setProgressState(packed.checklist || {});
@@ -329,6 +334,26 @@ function App() {
             if (packed.streakCount !== undefined) setStreakCount(packed.streakCount);
             if (packed.checkedInToday !== undefined) setCheckedInToday(packed.checkedInToday);
           }
+          if (packed.studyHistory) {
+            setStudyHistory(packed.studyHistory);
+            localStorage.setItem('cand_studyHistory', JSON.stringify(packed.studyHistory));
+          }
+          if (packed.wakeHistory) {
+            setWakeHistory(packed.wakeHistory);
+            localStorage.setItem('cand_wakeHistory', JSON.stringify(packed.wakeHistory));
+          }
+          if (packed.sleepHistory) {
+            setSleepHistory(packed.sleepHistory);
+            localStorage.setItem('cand_sleepHistory', JSON.stringify(packed.sleepHistory));
+          }
+          if (packed.studyLogs) {
+            setStudyLogs(packed.studyLogs);
+            localStorage.setItem('cand_studyLogs', JSON.stringify(packed.studyLogs));
+          }
+          if (packed.todayHours !== undefined) {
+            setTodayHours(packed.todayHours);
+            localStorage.setItem('cand_todayHours', JSON.stringify(packed.todayHours));
+          }
         } else {
           // Old format (just progressState)
           setProgressState(cloudState || {});
@@ -339,7 +364,7 @@ function App() {
         console.log('Progress restored from cloud backup.');
       } else {
         // No cloud data yet → push current local state as first backup
-        const { progressState: ps, caLevel: cl, studyTarget: st, totalHours: th, slots: sl, tasks: tk, revisions: rv, mistakes: ms, fullName: fn, examStartDate: esd, streakCount: sc, checkedInToday: cit } = stateRef.current;
+        const { progressState: ps, caLevel: cl, studyTarget: st, totalHours: th, slots: sl, tasks: tk, revisions: rv, mistakes: ms, fullName: fn, examStartDate: esd, streakCount: sc, checkedInToday: cit, studyHistory: sh, wakeHistory: wh, sleepHistory: sph, studyLogs: slg, todayHours: thrs } = stateRef.current;
         
         // Pack state
         const packedProgress = {
@@ -352,6 +377,11 @@ function App() {
           examStartDate: esd,
           streakCount: sc,
           checkedInToday: cit,
+          studyHistory: sh,
+          wakeHistory: wh,
+          sleepHistory: sph,
+          studyLogs: slg,
+          todayHours: thrs,
           streakMigrated: true
         };
 
@@ -386,6 +416,11 @@ function App() {
         examStartDate,
         streakCount,
         checkedInToday,
+        studyHistory,
+        wakeHistory,
+        sleepHistory,
+        studyLogs,
+        todayHours,
         streakMigrated: true
       };
 
@@ -400,7 +435,7 @@ function App() {
     return () => {
       if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     };
-  }, [progressState, caLevel, studyTarget, totalHours, fullName, examStartDate, tasks, revisions, mistakes, slots, streakCount, checkedInToday, session]);
+  }, [progressState, caLevel, studyTarget, totalHours, fullName, examStartDate, tasks, revisions, mistakes, slots, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, session]);
 
 
 
