@@ -7478,3 +7478,21 @@ body.dark .matrix-modal-close-btn:hover {
   border-color: rgba(99, 102, 241, 0.25);
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.08);
 }
+
+/* Drilldown Mistakes Card Dark Mode Styles */
+body.dark .drilldown-card-item {
+  background-color: var(--bg-secondary);
+  border-color: var(--border-color);
+}
+
+body.dark .drilldown-card-desc-success {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+body.dark .drilldown-card-desc-neutral {
+  background-color: rgba(156, 163, 175, 0.1);
+  color: #d1d5db;
+  border-color: rgba(156, 163, 175, 0.2);
+}

@@ -91,6 +91,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
   const [drillSubject, setDrillSubject] = React.useState('');
   const [drillChapter, setDrillChapter] = React.useState('');
   const [drillCategory, setDrillCategory] = React.useState<'Conceptual' | 'Silly' | 'Misread' | 'Time' | 'Formula'>('Conceptual');
+  const [confirmDeleteId, setConfirmDeleteId] = React.useState<string | null>(null);
 
   const currentSyllabus = React.useMemo(() => {
     return (SYLLABUS_DATA[caLevel as keyof typeof SYLLABUS_DATA] || SYLLABUS_DATA.Intermediate) as Record<string, string[]>;
@@ -173,9 +174,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
   };
 
   const handleDeleteMistake = (id: string) => {
-    if (confirm('Are you sure you want to delete this mistake log?')) {
-      setMistakes((prev) => prev.filter((m) => m.id !== id));
-    }
+    setConfirmDeleteId(id);
   };
 
   const handleCellClick = (sub: string, chap: string, cat: 'Conceptual' | 'Silly' | 'Misread' | 'Time' | 'Formula') => {
@@ -899,6 +898,41 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                 onClick={() => setIsDrillDownOpen(false)}
               >
                 Close View
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {confirmDeleteId && createPortal(
+        <div className="matrix-modal-overlay" onClick={() => setConfirmDeleteId(null)} style={{ zIndex: 1200 }}>
+          <div className="matrix-modal-card" onClick={(e) => e.stopPropagation()} style={{ padding: '24px 20px', maxWidth: '380px' }}>
+            <h3 className="matrix-modal-title" style={{ fontSize: '18px', fontWeight: '800' }}>Delete Mistake Log</h3>
+            <p className="matrix-modal-subtitle" style={{ fontSize: '13.5px', color: 'var(--text-secondary)', marginTop: '8px', lineHeight: '1.45' }}>
+              Are you sure you want to delete this mistake log? This action cannot be undone.
+            </p>
+            
+            <div className="matrix-modal-actions mt-4" style={{ display: 'flex', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setMistakes((prev) => prev.filter((m) => m.id !== confirmDeleteId));
+                  showToast('Mistake log deleted successfully.', 'success');
+                  setConfirmDeleteId(null);
+                }}
+                className="matrix-modal-save-btn"
+                style={{ flex: 1, backgroundColor: '#ef4444', color: 'white' }}
+              >
+                Delete
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteId(null)}
+                className="matrix-modal-cancel-btn"
+                style={{ flex: 1, margin: 0 }}
+              >
+                Cancel
               </button>
             </div>
           </div>
