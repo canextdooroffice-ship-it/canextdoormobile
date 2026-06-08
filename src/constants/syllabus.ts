@@ -1,26 +1,33 @@
 // Define static syllabus curriculum
 export const SYLLABUS_DATA = {
   Final: {
-    'Financial Reporting (FR)': [
-      '1. intro to Ind As',
-      '10. Ind As-38',
-      '11. Ind AS-40',
+    'Paper 1: Financial Reporting': [
+      '1. Intro to Ind AS',
       '2. Conceptual Framework',
-      '3. Presentation of Ind As'
+      '3. Presentation of Ind AS',
+      '4. Ind AS 38: Intangible Assets',
+      '5. Ind AS 40: Investment Property'
     ],
-    'Advanced Auditing & Ethics': [
+    'Paper 2: Advanced Financial Management': [
+      '1. Security Analysis & Portfolio Management',
+      '2. Financial Derivatives & Interest Rate Risk',
+      '3. International Financial Management',
+      '4. Corporate Valuation, Mergers & Acquisitions',
+      '5. Startup Finance & Securitization'
+    ],
+    'Paper 3: Advanced Auditing and Assurance': [
       '1. Professional Ethics & Code of Conduct',
       '2. SA 200 Series: General Principles',
       '3. SA 500 Series: Audit Evidence',
       '4. Audit of Banks & Insurance'
     ],
-    'Direct Tax Laws & International Tax': [
+    'Paper 4: Direct Tax and International Taxation': [
       '1. Assessment of Various Entities',
       '2. Transfer Pricing & International Tax',
       '3. Charitable Trusts & Tax Treaties',
       '4. Deductions & Tax Planning'
     ],
-    'Indirect Tax Laws (GST)': [
+    'Paper 5: Indirect Taxation and Customs': [
       '1. GST: Charge and Exemptions',
       '2. GST: Input Tax Credit (ITC)',
       '3. GST: Registration & Invoicing',

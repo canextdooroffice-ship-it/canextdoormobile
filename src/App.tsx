@@ -170,6 +170,51 @@ function App() {
     } catch { /* ignore */ }
   });
 
+  // One-time migration: rename old CA Final subjects to official Paper 1-5 names in local storage
+  useState(() => {
+    try {
+      const migrateKey = 'cand_final_subjects_migrated_v2';
+      if (!localStorage.getItem(migrateKey)) {
+        const subRenameMap: Record<string, string> = {
+          'Financial Reporting (FR)': 'Paper 1: Financial Reporting',
+          'Advanced Auditing & Ethics': 'Paper 3: Advanced Auditing and Assurance',
+          'Direct Tax Laws & International Tax': 'Paper 4: Direct Tax and International Taxation',
+          'Indirect Tax Laws (GST)': 'Paper 5: Indirect Taxation and Customs',
+        };
+
+        const currentProgress = loadFromStorage<ProgressState>(LS_KEYS.PROGRESS, {});
+        const currentGroups = loadFromStorage<Record<string, 'Group 1' | 'Group 2'>>('cand_subjectGroups', {});
+        let progressChanged = false;
+        let groupsChanged = false;
+
+        Object.entries(subRenameMap).forEach(([oldSub, newSub]) => {
+          if (currentProgress[oldSub] && !currentProgress[newSub]) {
+            currentProgress[newSub] = currentProgress[oldSub];
+            delete currentProgress[oldSub];
+            progressChanged = true;
+          }
+        });
+
+        Object.entries(subRenameMap).forEach(([oldSub, newSub]) => {
+          if (currentGroups[oldSub] && !currentGroups[newSub]) {
+            currentGroups[newSub] = currentGroups[oldSub];
+            delete currentGroups[oldSub];
+            groupsChanged = true;
+          }
+        });
+
+        if (progressChanged) {
+          saveToStorage(LS_KEYS.PROGRESS, currentProgress);
+        }
+        if (groupsChanged) {
+          saveToStorage('cand_subjectGroups', currentGroups);
+        }
+
+        localStorage.setItem(migrateKey, '1');
+      }
+    } catch { /* ignore */ }
+  });
+
   const [session, setSession] = useState<Session | null>(null);
   const [activeTab, setActiveTab] = useState<string>('home');
   
@@ -277,7 +322,30 @@ function App() {
 
   // Subject grouping (Group 1 / Group 2) mapping
   const [subjectGroups, setSubjectGroups] = useState<Record<string, 'Group 1' | 'Group 2'>>(() => {
-    return loadFromStorage<Record<string, 'Group 1' | 'Group 2'>>('cand_subjectGroups', {});
+    const loaded = loadFromStorage<Record<string, 'Group 1' | 'Group 2'>>('cand_subjectGroups', {});
+    const defaults: Record<string, 'Group 1' | 'Group 2'> = {
+      'Paper 1: Financial Reporting': 'Group 1',
+      'Paper 2: Advanced Financial Management': 'Group 1',
+      'Paper 3: Advanced Auditing and Assurance': 'Group 1',
+      'Paper 4: Direct Tax and International Taxation': 'Group 2',
+      'Paper 5: Indirect Taxation and Customs': 'Group 2',
+      'Advanced Accounting': 'Group 1',
+      'Corporate & Other Laws': 'Group 1',
+      'Taxation (DT & IDT)': 'Group 1',
+      'Cost & Management Accounting': 'Group 2',
+    };
+    let updated = { ...loaded };
+    let changed = false;
+    Object.entries(defaults).forEach(([sub, grp]) => {
+      if (!updated[sub]) {
+        updated[sub] = grp;
+        changed = true;
+      }
+    });
+    if (changed) {
+      saveToStorage('cand_subjectGroups', updated);
+    }
+    return updated;
   });
 
   useEffect(() => {
