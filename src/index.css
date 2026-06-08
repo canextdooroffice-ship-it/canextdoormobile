@@ -830,6 +830,9 @@ body {
   background-repeat: no-repeat;
   background-position: right 16px center;
   background-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .styled-select:focus, .styled-num-input:focus {
@@ -4638,6 +4641,9 @@ body {
   background-repeat: no-repeat;
   background-position: right 16px center;
   background-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .timer-select:hover {
@@ -5894,7 +5900,8 @@ body.dark .matrix-cell-box.count-4, body.dark .key-block.count-4 {
   }
 
   .error-density-card .matrix-subject-select {
-    max-width: unset;
+    max-width: 100%;
+    min-width: 0;
     flex-grow: 1;
   }
 
@@ -6202,7 +6209,8 @@ body.dark .matrix-cell-box.count-4, body.dark .key-block.count-4 {
   }
   
   .matrix-subject-select {
-    max-width: none;
+    max-width: 100%;
+    min-width: 0;
     flex: 1;
   }
   

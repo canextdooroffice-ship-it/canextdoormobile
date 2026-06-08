@@ -170,51 +170,6 @@ function App() {
     } catch { /* ignore */ }
   });
 
-  // One-time migration: rename old CA Final subjects to official Paper 1-5 names in local storage
-  useState(() => {
-    try {
-      const migrateKey = 'cand_final_subjects_migrated_v2';
-      if (!localStorage.getItem(migrateKey)) {
-        const subRenameMap: Record<string, string> = {
-          'Financial Reporting (FR)': 'Paper 1: Financial Reporting',
-          'Advanced Auditing & Ethics': 'Paper 3: Advanced Auditing and Assurance',
-          'Direct Tax Laws & International Tax': 'Paper 4: Direct Tax and International Taxation',
-          'Indirect Tax Laws (GST)': 'Paper 5: Indirect Taxation and Customs',
-        };
-
-        const currentProgress = loadFromStorage<ProgressState>(LS_KEYS.PROGRESS, {});
-        const currentGroups = loadFromStorage<Record<string, 'Group 1' | 'Group 2'>>('cand_subjectGroups', {});
-        let progressChanged = false;
-        let groupsChanged = false;
-
-        Object.entries(subRenameMap).forEach(([oldSub, newSub]) => {
-          if (currentProgress[oldSub] && !currentProgress[newSub]) {
-            currentProgress[newSub] = currentProgress[oldSub];
-            delete currentProgress[oldSub];
-            progressChanged = true;
-          }
-        });
-
-        Object.entries(subRenameMap).forEach(([oldSub, newSub]) => {
-          if (currentGroups[oldSub] && !currentGroups[newSub]) {
-            currentGroups[newSub] = currentGroups[oldSub];
-            delete currentGroups[oldSub];
-            groupsChanged = true;
-          }
-        });
-
-        if (progressChanged) {
-          saveToStorage(LS_KEYS.PROGRESS, currentProgress);
-        }
-        if (groupsChanged) {
-          saveToStorage('cand_subjectGroups', currentGroups);
-        }
-
-        localStorage.setItem(migrateKey, '1');
-      }
-    } catch { /* ignore */ }
-  });
-
   const [session, setSession] = useState<Session | null>(null);
   const [activeTab, setActiveTab] = useState<string>('home');
   
@@ -225,6 +180,256 @@ function App() {
   const [progressState, setProgressState] = useState<ProgressState>(() =>
     loadFromStorage<ProgressState>(LS_KEYS.PROGRESS, buildInitialProgress())
   );
+
+  // Ensure default subjects and their chapters for current caLevel are initialized in progressState,
+  // and prune default subjects and items of other levels, and prune any stale mock chapters.
+  useEffect(() => {
+    if (caLevel) {
+      const levelSyllabus = SYLLABUS_DATA[caLevel as keyof typeof SYLLABUS_DATA];
+      if (!levelSyllabus) return;
+
+      const MOCK_CHAPTERS = new Set([
+        // Final
+        '1. Intro to Ind AS',
+        '2. Conceptual Framework',
+        '3. Presentation of Ind AS',
+        '4. Ind AS 38: Intangible Assets',
+        '5. Ind AS 40: Investment Property',
+        '1. Security Analysis & Portfolio Management',
+        '2. Financial Derivatives & Interest Rate Risk',
+        '3. International Financial Management',
+        '4. Corporate Valuation, Mergers & Acquisitions',
+        '5. Startup Finance & Securitization',
+        '1. Professional Ethics & Code of Conduct',
+        '2. SA 200 Series: General Principles',
+        '3. SA 500 Series: Audit Evidence',
+        '4. Audit of Banks & Insurance',
+        '1. Assessment of Various Entities',
+        '2. Transfer Pricing & International Tax',
+        '3. Charitable Trusts & Tax Treaties',
+        '4. Deductions & Tax Planning',
+        '1. GST: Charge and Exemptions',
+        '2. GST: Input Tax Credit (ITC)',
+        '3. GST: Registration & Invoicing',
+        '4. Customs Duty & Foreign Trade',
+        // Intermediate
+        '1. AS 10: Property, Plant and Equipment',
+        '2. AS 19: Leases',
+        '3. Company Financial Statements & Buybacks',
+        '4. Branch Accounts & Reconstruction',
+        '1. Management & Administration',
+        '2. Declaration and Payment of Dividend',
+        '3. Accounts of Companies & Audit',
+        '4. General Clauses Act & Interpretation',
+        '1. Income Tax: Heads of Income',
+        '2. Income Tax: Deductions & TDS',
+        '3. GST: Basic Concepts & Supply',
+        '4. GST: Input Tax Credit (ITC)',
+        '1. Material, Labor, and Overheads',
+        '2. Standard & Marginal Costing',
+        '3. Budgetary Control & ABC Costing',
+        '4. Process, Job, and Service Costing',
+        // Foundation
+        '1. Theoretical Framework & Process',
+        '2. Depreciation & Inventory Valuation',
+        '3. Special Transactions (Consignment)',
+        '4. Preparation of Final Accounts',
+        '1. Indian Contract Act, 1872',
+        '2. Sale of Goods Act, 1930',
+        '3. Indian Partnership Act, 1932',
+        '4. Limited Liability Partnership Act',
+        '1. Ratio, Proportion, Indices, Logarithms',
+        '2. Equations, Matrices, Inequalities',
+        '3. Time Value of Money',
+        '4. Permutations & Combinations',
+        '1. Introduction to Economics',
+        '2. Theory of Demand and Supply',
+        '3. Theory of Production and Cost',
+        '4. Price Determination in Markets'
+      ]);
+
+      // Identify default subjects of other levels
+      const otherLevelsSubjects = new Set<string>();
+      Object.entries(SYLLABUS_DATA).forEach(([levelName, levelSyllabusObj]) => {
+        if (levelName !== caLevel) {
+          Object.keys(levelSyllabusObj).forEach((subName) => {
+            otherLevelsSubjects.add(subName);
+          });
+        }
+      });
+
+      // Check if progressState contains default subjects of other levels
+      let hasOtherLevelSubjects = false;
+      Object.keys(progressState).forEach((subName) => {
+        if (otherLevelsSubjects.has(subName)) {
+          hasOtherLevelSubjects = true;
+        }
+      });
+
+      // Check if any default subject or default chapter is missing from progressState
+      let missing = false;
+      const newlyAddedSubjects: string[] = [];
+      Object.entries(levelSyllabus).forEach(([subName, chapters]) => {
+        if (!progressState[subName]) {
+          missing = true;
+          newlyAddedSubjects.push(subName);
+        } else {
+          chapters.forEach((chap) => {
+            if (!progressState[subName][chap]) {
+              missing = true;
+            }
+          });
+        }
+      });
+
+      // Check if any subject has mock chapters in progressState
+      let hasMockChapters = false;
+      Object.entries(progressState).forEach(([subName, chaptersMap]) => {
+        if (chaptersMap) {
+          const chapNames = Object.keys(chaptersMap);
+          const mockFound = chapNames.filter((c) => MOCK_CHAPTERS.has(c));
+          if (mockFound.length > 0) {
+            console.log(`[PRUNE] Found mock chapters in "${subName}":`, mockFound);
+            hasMockChapters = true;
+          }
+        }
+      });
+
+      console.log('[PRUNE] caLevel:', caLevel, 'missing subjects/chapters:', missing, 'hasMockChapters:', hasMockChapters, 'hasOtherLevelSubjects:', hasOtherLevelSubjects);
+
+      if (missing || hasMockChapters || hasOtherLevelSubjects) {
+        setProgressState((prev) => {
+          let updated = { ...prev };
+          let changed = false;
+
+          // Prune default subjects of other levels
+          Object.keys(updated).forEach((subName) => {
+            if (otherLevelsSubjects.has(subName)) {
+              console.log(`[PRUNE] Removing subject of other level: "${subName}"`);
+              delete updated[subName];
+              changed = true;
+            }
+          });
+
+          // Prune mock chapters from all subjects
+          Object.keys(updated).forEach((subName) => {
+            if (updated[subName]) {
+              const prunedChapters: Record<string, any> = {};
+              let subChanged = false;
+              Object.entries(updated[subName]).forEach(([chapName, chapStatus]) => {
+                if (MOCK_CHAPTERS.has(chapName)) {
+                  subChanged = true;
+                  changed = true;
+                } else {
+                  prunedChapters[chapName] = chapStatus;
+                }
+              });
+              if (subChanged) {
+                console.log(`[PRUNE] Pruning subject "${subName}". Before:`, Object.keys(updated[subName]), 'After:', Object.keys(prunedChapters));
+                updated[subName] = prunedChapters;
+              }
+            }
+          });
+
+          // Add missing default subjects or default chapters
+          Object.entries(levelSyllabus).forEach(([subName, chapters]) => {
+            if (!updated[subName]) {
+              updated[subName] = {};
+            }
+            chapters.forEach((chap) => {
+              if (!updated[subName][chap]) {
+                updated[subName][chap] = {
+                  classDone: false,
+                  priority: 'C',
+                  ldrs: false,
+                  revisionCycle: 0,
+                };
+                changed = true;
+              }
+            });
+          });
+
+          if (changed) {
+            console.log('[PRUNE] Saving pruned/updated progressState to local storage.');
+            saveToStorage(LS_KEYS.PROGRESS, updated);
+          }
+          return updated;
+        });
+
+        if (hasOtherLevelSubjects) {
+          // Prune other levels' default subjects from subjectGroups
+          setSubjectGroups((prevGroups) => {
+            let updatedGroups = { ...prevGroups };
+            let groupsChanged = false;
+            Object.keys(updatedGroups).forEach((subName) => {
+              if (otherLevelsSubjects.has(subName)) {
+                delete updatedGroups[subName];
+                groupsChanged = true;
+              }
+            });
+            if (groupsChanged) {
+              saveToStorage('cand_subjectGroups', updatedGroups);
+            }
+            return updatedGroups;
+          });
+
+          // Prune other levels' default subjects from slots
+          setSlots((prevSlots) => {
+            const updatedSlots = prevSlots.filter((slot) => !otherLevelsSubjects.has(slot.subject));
+            if (updatedSlots.length !== prevSlots.length) {
+              saveToStorage(LS_KEYS.SLOTS, updatedSlots);
+            }
+            return updatedSlots;
+          });
+          // Prune other levels' default subjects from mistakes
+          setMistakes((prevMistakes) => {
+            const updatedMistakes = prevMistakes.filter((m) => !otherLevelsSubjects.has(m.subjectName));
+            if (updatedMistakes.length !== prevMistakes.length) {
+              saveToStorage(LS_KEYS.MISTAKES, updatedMistakes);
+            }
+            return updatedMistakes;
+          });
+
+          // Prune other levels' default subjects from revisions
+          setRevisions((prevRevisions) => {
+            const updatedRevisions = prevRevisions.filter((r) => !otherLevelsSubjects.has(r.subjectName));
+            if (updatedRevisions.length !== prevRevisions.length) {
+              saveToStorage(LS_KEYS.REVISIONS, updatedRevisions);
+            }
+            return updatedRevisions;
+          });
+        }
+
+        if (newlyAddedSubjects.length > 0) {
+          setSubjectGroups((prevGroups) => {
+            let updatedGroups = { ...prevGroups };
+            let groupsChanged = false;
+            const defaults: Record<string, 'Group 1' | 'Group 2'> = {
+              'Paper 1: Financial Reporting': 'Group 1',
+              'Paper 2: Advanced Financial Management': 'Group 1',
+              'Paper 3: Advanced Auditing and Assurance': 'Group 1',
+              'Paper 4: Direct Tax and International Taxation': 'Group 2',
+              'Paper 5: Indirect Taxation and Customs': 'Group 2',
+              'Advanced Accounting': 'Group 1',
+              'Corporate & Other Laws': 'Group 1',
+              'Taxation (DT & IDT)': 'Group 1',
+              'Cost & Management Accounting': 'Group 2',
+            };
+            newlyAddedSubjects.forEach((subName) => {
+              if (defaults[subName] && !updatedGroups[subName]) {
+                updatedGroups[subName] = defaults[subName];
+                groupsChanged = true;
+              }
+            });
+            if (groupsChanged) {
+              saveToStorage('cand_subjectGroups', updatedGroups);
+            }
+            return updatedGroups;
+          });
+        }
+      }
+    }
+  }, [caLevel, progressState]);
   const [fullName, setFullName] = useState<string>(() => loadFromStorage(LS_KEYS.FULL_NAME, ''));
   const [examStartDate, setExamStartDate] = useState<string>(() => loadFromStorage(LS_KEYS.EXAM_START_DATE, ''));
   const [preparingFor, setPreparingFor] = useState<'Group 1' | 'Group 2' | 'Both Groups'>(() => {
@@ -322,7 +527,7 @@ function App() {
 
   // Subject grouping (Group 1 / Group 2) mapping
   const [subjectGroups, setSubjectGroups] = useState<Record<string, 'Group 1' | 'Group 2'>>(() => {
-    const loaded = loadFromStorage<Record<string, 'Group 1' | 'Group 2'>>('cand_subjectGroups', {});
+    const raw = localStorage.getItem('cand_subjectGroups');
     const defaults: Record<string, 'Group 1' | 'Group 2'> = {
       'Paper 1: Financial Reporting': 'Group 1',
       'Paper 2: Advanced Financial Management': 'Group 1',
@@ -334,18 +539,15 @@ function App() {
       'Taxation (DT & IDT)': 'Group 1',
       'Cost & Management Accounting': 'Group 2',
     };
-    let updated = { ...loaded };
-    let changed = false;
-    Object.entries(defaults).forEach(([sub, grp]) => {
-      if (!updated[sub]) {
-        updated[sub] = grp;
-        changed = true;
-      }
-    });
-    if (changed) {
-      saveToStorage('cand_subjectGroups', updated);
+    if (raw === null) {
+      saveToStorage('cand_subjectGroups', defaults);
+      return defaults;
     }
-    return updated;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return {};
+    }
   });
 
   useEffect(() => {
