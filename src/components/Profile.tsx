@@ -15,6 +15,8 @@ interface ProfileProps {
   onUpdateFullName: (name: string) => void;
   examStartDate: string;
   onUpdateExamStartDate: (date: string) => void;
+  preparingFor: 'Group 1' | 'Group 2' | 'Both Groups';
+  onUpdatePreparingFor: (val: 'Group 1' | 'Group 2' | 'Both Groups') => void;
 }
 
 export const Profile: React.FC<ProfileProps> = ({
@@ -29,6 +31,8 @@ export const Profile: React.FC<ProfileProps> = ({
   onUpdateFullName,
   examStartDate: examStartDateProp,
   onUpdateExamStartDate,
+  preparingFor: preparingForProp,
+  onUpdatePreparingFor,
 }) => {
   // Load initial values from localStorage
   const getStoredValue = (key: string, fallback: string) => {
@@ -46,7 +50,7 @@ export const Profile: React.FC<ProfileProps> = ({
   });
   const [courseLevel, setCourseLevel] = React.useState(() => getStoredValue('cand_courseLevel', caLevel));
   const [preparingFor, setPreparingFor] = React.useState<'Group 1' | 'Group 2' | 'Both Groups'>(
-    () => getStoredValue('cand_preparingFor', 'Both Groups') as 'Group 1' | 'Group 2' | 'Both Groups'
+    () => preparingForProp || getStoredValue('cand_preparingFor', 'Both Groups') as 'Group 1' | 'Group 2' | 'Both Groups'
   );
   const [attemptMonthYear, setAttemptMonthYear] = React.useState(() => getStoredValue('cand_attemptMonthYear', ''));
   const [examStartDate, setExamStartDate] = React.useState(() => examStartDateProp || getStoredValue('cand_examStartDate', ''));
@@ -79,6 +83,12 @@ export const Profile: React.FC<ProfileProps> = ({
     setLocalStudyTarget(studyTargetProp);
   }
 
+  const [prevPreparingFor, setPrevPreparingFor] = React.useState(preparingForProp);
+  if (preparingForProp !== prevPreparingFor) {
+    setPrevPreparingFor(preparingForProp);
+    setPreparingFor(preparingForProp);
+  }
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -98,6 +108,7 @@ export const Profile: React.FC<ProfileProps> = ({
       onUpdateFullName(fullName);
       onUpdateExamStartDate(examStartDate);
       setStudyTarget(studyTarget);
+      onUpdatePreparingFor(preparingFor);
 
       showToast('Profile updated successfully! ✨', 'success');
     } catch (err) {
@@ -110,7 +121,7 @@ export const Profile: React.FC<ProfileProps> = ({
     setFullName(getStoredValue('cand_fullName', fullNameProp || ''));
     setLocalStudyTarget(parseInt(getStoredValue('cand_studyTarget', studyTargetProp.toString()), 10));
     setCourseLevel(getStoredValue('cand_courseLevel', caLevel));
-    setPreparingFor(getStoredValue('cand_preparingFor', 'Both Groups') as 'Group 1' | 'Group 2' | 'Both Groups');
+    setPreparingFor(preparingForProp || getStoredValue('cand_preparingFor', 'Both Groups') as 'Group 1' | 'Group 2' | 'Both Groups');
     setAttemptMonthYear(getStoredValue('cand_attemptMonthYear', ''));
     setExamStartDate(getStoredValue('cand_examStartDate', examStartDateProp || ''));
 

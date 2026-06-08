@@ -32,11 +32,12 @@ interface DashboardProps {
   slots: ScheduleSlot[];
   setSlots: React.Dispatch<React.SetStateAction<ScheduleSlot[]>>;
   streakCount: number;
-  setStreakCount: React.Dispatch<React.SetStateAction<number>>;
   checkedInToday: boolean;
-  setCheckedInToday: React.Dispatch<React.SetStateAction<boolean>>;
+  setCheckedInToday: (val: boolean | ((prev: boolean) => boolean)) => void;
   darkMode: boolean;
   onToggleDarkMode: () => void;
+  preparingFor?: 'Group 1' | 'Group 2' | 'Both Groups';
+  subjectGroups?: Record<string, 'Group 1' | 'Group 2'>;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -53,11 +54,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
   slots,
   setSlots,
   streakCount,
-  setStreakCount,
   checkedInToday,
   setCheckedInToday,
   darkMode,
   onToggleDarkMode,
+  preparingFor = 'Both Groups',
+  subjectGroups = {},
 }) => {
   // Extract user alias from real name or email fallback
   const userAlias = userFullName || (userEmail ? userEmail.split('@')[0] : 'Student');
@@ -87,7 +89,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   // Get all subjects active for the current level (excluding deleted ones, including custom ones)
   const getAllSubjects = () => {
     const defaultSubs = Object.keys(currentSyllabus);
-    return Object.keys(progressState).filter((sub) => {
+    const all = Object.keys(progressState).filter((sub) => {
       const isDefaultCurrent = defaultSubs.includes(sub);
       const isDefaultAny = Object.values(SYLLABUS_DATA).some((levelSyllabus) =>
         Object.keys(levelSyllabus).includes(sub)
@@ -95,6 +97,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
       const isCustom = !isDefaultAny;
       return isDefaultCurrent || isCustom;
     });
+
+    if (preparingFor === 'Group 1') {
+      return all.filter((sub) => subjectGroups[sub] === 'Group 1' || !subjectGroups[sub]);
+    }
+    if (preparingFor === 'Group 2') {
+      return all.filter((sub) => subjectGroups[sub] === 'Group 2' || !subjectGroups[sub]);
+    }
+    return all;
   };
 
   // Compile full chapters list dynamically
@@ -145,11 +155,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   const handleCheckIn = () => {
     if (!checkedInToday) {
-      setStreakCount(prev => prev + 1);
       setCheckedInToday(true);
       showToast("Great job checking in today! Consistency is Key 🔥", "success");
     } else {
-      setStreakCount(prev => prev - 1);
       setCheckedInToday(false);
     }
   };

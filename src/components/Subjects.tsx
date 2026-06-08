@@ -23,13 +23,15 @@ interface SubjectsProps {
   showToast: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
   caLevel: string;
   progressState: ProgressState;
+  subjectGroups: Record<string, 'Group 1' | 'Group 2'>;
+  onSetSubjectGroup: (subName: string, group: 'Group 1' | 'Group 2' | null) => void;
   onToggleClass: (subName: string, chapName: string) => void;
   onSetPriority: (subName: string, chapName: string, priority: 'A' | 'B' | 'C') => void;
   onToggleLdrs: (subName: string, chapName: string) => void;
   onToggleRevisionCycle: (subName: string, chapName: string, cycle: number) => void;
   onAddChapter: (subName: string, chapName: string, priority: 'A' | 'B' | 'C') => void;
   onDeleteChapter: (subName: string, chapName: string) => void;
-  onAddSubject: (subName: string) => void;
+  onAddSubject: (subName: string, group: 'Group 1' | 'Group 2' | null) => void;
   onDeleteSubject: (subName: string) => void;
   onSetVideoUrl: (subName: string, chapName: string, url: string) => void;
   onSetLdrNotes: (subName: string, chapName: string, notes: string, ldrs: boolean) => void;
@@ -39,6 +41,8 @@ export const Subjects: React.FC<SubjectsProps> = ({
   showToast,
   caLevel,
   progressState,
+  subjectGroups,
+  onSetSubjectGroup,
   onToggleClass,
   onSetPriority,
   onToggleRevisionCycle,
@@ -139,6 +143,7 @@ export const Subjects: React.FC<SubjectsProps> = ({
   // New Subject Form States
   const [showAddSubForm, setShowAddSubForm] = useState(false);
   const [newSubjectName, setNewSubjectName] = useState('');
+  const [newSubjectGroup, setNewSubjectGroup] = useState<'Group 1' | 'Group 2' | null>(null);
 
   const toggleSubjectExpand = (subName: string) => {
     setExpandedSubjects((prev) => ({
@@ -184,12 +189,14 @@ export const Subjects: React.FC<SubjectsProps> = ({
   const handleAddNewSubject = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSubjectName.trim()) return;
-    onAddSubject(newSubjectName.trim());
+    onAddSubject(newSubjectName.trim(), newSubjectGroup);
     setNewChapterSub(newSubjectName.trim());
     setNewSubjectName('');
+    setNewSubjectGroup(null);
     setShowAddSubForm(false);
     setExpandedSubjects((prev) => ({ ...prev, [newSubjectName.trim()]: true }));
-    showToast(`Subject "${newSubjectName.trim()}" added!`, 'success');
+    const groupName = newSubjectGroup ? ` added to ${newSubjectGroup}!` : ` added!`;
+    showToast(`Subject "${newSubjectName.trim()}"${groupName}`, 'success');
   };
 
 
@@ -208,6 +215,234 @@ export const Subjects: React.FC<SubjectsProps> = ({
     });
 
     return Math.round((completedPoints / totalPoints) * 100);
+  };
+
+  const renderSubjectCard = (subName: string) => {
+    const chapters = getSubjectChapters(subName);
+    const isExpanded = !!expandedSubjects[subName];
+    const progress = calculateSubjectProgress(subName, chapters);
+
+    // Apply filters to chapters
+    const filteredChapters = chapters.filter((chap) => {
+      const status = progressState[subName]?.[chap] || {
+        classDone: false,
+        priority: 'C',
+        ldrs: false,
+        revisionCycle: 0,
+      };
+      const p = status.priority;
+
+      // Search Query filter
+      if (searchQuery.trim() && !chap.toLowerCase().includes(searchQuery.toLowerCase())) {
+        return false;
+      }
+      // Priority filter
+      if (priorityFilter !== 'ALL' && p !== priorityFilter) {
+        return false;
+      }
+      // Status checkbox filter list (match any selected condition - OR)
+      if (selectedStatuses.length > 0) {
+        const matchesAny = selectedStatuses.some((filterVal) => {
+          if (filterVal === 'NO_CLASS') return !status.classDone;
+          if (filterVal === 'CLASS_DONE') return status.classDone;
+          if (filterVal === 'R1_DONE') return status.revisionCycle >= 1;
+          if (filterVal === 'R2_DONE') return status.revisionCycle >= 2;
+          if (filterVal === 'R3_DONE') return status.revisionCycle >= 3;
+          return true;
+        });
+        if (!matchesAny) return false;
+      }
+
+      return true;
+    });
+
+    // Don't render subject card if searching and no matches found
+    if (searchQuery.trim() && filteredChapters.length === 0) {
+      return null;
+    }
+
+    const currentGroup = subjectGroups[subName];
+
+    return (
+      <div key={subName} className="subject-expand-card">
+        <div 
+          className="subject-expand-header"
+          onClick={() => toggleSubjectExpand(subName)}
+        >
+          <div className="subject-header-left">
+            <div className="subject-header-details">
+              <span className="subject-name-txt">{subName}</span>
+              <div className="subject-header-meta">
+                <span className="subject-progress-badge">{progress}% Done</span>
+                <span className="subject-chapters-count">{filteredChapters.length} Chapters</span>
+                <select
+                  value={currentGroup || ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    onSetSubjectGroup(subName, val === '' ? null : (val as 'Group 1' | 'Group 2'));
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className={`subject-group-select ${currentGroup ? (currentGroup === 'Group 1' ? 'g1' : 'g2') : 'none'}`}
+                  title="Assign Group"
+                >
+                  <option value="">No Group</option>
+                  <option value="Group 1">Group 1</option>
+                  <option value="Group 2">Group 2</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div className="subject-header-right">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setConfirmDelete({
+                  type: 'subject',
+                  subName
+                });
+              }}
+              className="subject-delete-btn"
+              title="Delete Subject"
+            >
+              <Trash2 size={16} />
+            </button>
+            {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+          </div>
+        </div>
+
+        {/* Progress mini indicator line */}
+        <div className="subject-progress-line-bg">
+          <div 
+            className="subject-progress-line-fill" 
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+
+        {isExpanded && (
+          <div className="planner-chapters-list slide-up">
+            {filteredChapters.length === 0 ? (
+              <p className="no-chapters-filter">
+                {chapters.length === 0 
+                  ? "This subject is empty. Click + Chapter above to add one!" 
+                  : "No chapters match your filter."}
+              </p>
+            ) : (
+              filteredChapters.map((chap) => {
+                const status = progressState[subName]?.[chap] || {
+                  classDone: false,
+                  priority: 'C',
+                  ldrs: false,
+                  revisionCycle: 0,
+                };
+
+                return (
+                  <div key={chap} className="planner-chapter-card">
+                    {/* Top Row: Class Status & Title & Actions */}
+                    <div className="chapter-card-header">
+                      <div className="class-status-box">
+                        <span className="box-lbl">CLASS</span>
+                        <button
+                          type="button"
+                          onClick={() => onToggleClass(subName, chap)}
+                          className={`class-checkbox ${status.classDone ? 'checked' : ''}`}
+                        >
+                          {status.classDone && <Check size={14} />}
+                        </button>
+                      </div>
+                      <span className="chapter-card-title">{chap}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setConfirmDelete({
+                            type: 'chapter',
+                            subName,
+                            chapName: chap
+                          });
+                        }}
+                        className="chapter-card-delete"
+                        title="Delete Chapter"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+
+                    {/* Control Row 1: Priority Selection & LDRS marker */}
+                    <div className="chapter-card-controls">
+                      <div className="priority-select-area">
+                        <span className="control-lbl">PRIORITY</span>
+                        <div className="priority-btn-group">
+                          {(['A', 'B', 'C'] as const).map((p) => {
+                            const isActive = status.priority === p;
+                            return (
+                              <button
+                                key={p}
+                                type="button"
+                                onClick={() => onSetPriority(subName, chap, p)}
+                                className={`priority-btn ${p} ${isActive ? 'active' : ''}`}
+                              >
+                                {p}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* LDRS Toggle button */}
+                      <div className="ldrs-toggle-area">
+                        <span className="control-lbl">LDRS</span>
+                        <button
+                          type="button"
+                          onClick={() => handleLdrClick(subName, chap)}
+                          className={`ldrs-btn ${status.ldrs ? 'active' : ''}`}
+                        >
+                          <Sparkles size={12} fill={status.ldrs ? 'currentColor' : 'none'} />
+                          <span>MARK LDRS</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Control Row 2: Revision Cycle indicators (1, 2, 3) */}
+                    <div className="chapter-card-controls pt-2">
+                      <div className="revision-cycle-area">
+                        <span className="control-lbl">REVISION CYCLE</span>
+                        <div className="cycle-btn-group">
+                          {([1, 2, 3] as const).map((cycleNum) => {
+                            const isChecked = status.revisionCycle >= cycleNum;
+                            return (
+                              <button
+                                key={cycleNum}
+                                type="button"
+                                onClick={() => onToggleRevisionCycle(subName, chap, cycleNum)}
+                                className={`cycle-btn ${isChecked ? 'active' : ''}`}
+                              >
+                                {cycleNum}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Resource Actions (watch) */}
+                      <div className="resource-actions-area">
+                        <button
+                          type="button"
+                          onClick={() => handlePlayClick(subName, chap)}
+                          className={`resource-action-btn ${status.videoUrl ? 'has-video' : ''}`}
+                          title={status.videoUrl ? "Watch Lecture" : "Add YouTube Link"}
+                        >
+                          <Play size={14} fill="currentColor" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -450,6 +685,22 @@ export const Subjects: React.FC<SubjectsProps> = ({
                 className="styled-task-input"
               />
             </div>
+            <div className="input-group mt-3">
+              <label>Group</label>
+              <div className="form-priority-btn-group">
+                {(['Group 1', 'Group 2'] as const).map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => setNewSubjectGroup((prev) => prev === g ? null : g)}
+                    className={`form-priority-btn ${g === 'Group 1' ? 'g1' : 'g2'} ${newSubjectGroup === g ? 'active' : ''}`}
+                    style={{ flex: 1 }}
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
+            </div>
             <button type="submit" className="action-button-primary mt-4">
               <span>Add Subject</span>
             </button>
@@ -457,219 +708,58 @@ export const Subjects: React.FC<SubjectsProps> = ({
         )}
       </div>
 
-      {/* Subject Expandable Folders */}
+      {/* Subject Expandable Folders partitioned by Group */}
       <div className="subject-collapsible-list">
-        {getAllSubjects().map((subName) => {
-          const chapters = getSubjectChapters(subName);
-          const isExpanded = !!expandedSubjects[subName];
-          const progress = calculateSubjectProgress(subName, chapters);
+        {/* No Group Section */}
+        <div className="subject-group-section">
+          <div className="subject-group-header">
+            <span className="group-title-label">No Group</span>
+            <span className="group-count-badge">
+              {getAllSubjects().filter(sub => !subjectGroups[sub]).length}
+            </span>
+          </div>
+          {getAllSubjects().filter(sub => !subjectGroups[sub]).length === 0 ? (
+            <p className="no-subjects-msg">No ungrouped subjects.</p>
+          ) : (
+            getAllSubjects()
+              .filter(sub => !subjectGroups[sub])
+              .map((subName) => renderSubjectCard(subName))
+          )}
+        </div>
 
-          // Apply filters to chapters
-          const filteredChapters = chapters.filter((chap) => {
-            const status = progressState[subName]?.[chap] || {
-              classDone: false,
-              priority: 'C',
-              ldrs: false,
-              revisionCycle: 0,
-            };
-            const p = status.priority;
+        {/* Group 1 Section */}
+        <div className="subject-group-section mt-6">
+          <div className="subject-group-header">
+            <span className="group-title-label">Group 1</span>
+            <span className="group-count-badge">
+              {getAllSubjects().filter(sub => subjectGroups[sub] === 'Group 1').length}
+            </span>
+          </div>
+          {getAllSubjects().filter(sub => subjectGroups[sub] === 'Group 1').length === 0 ? (
+            <p className="no-subjects-msg">No Group 1 subjects assigned.</p>
+          ) : (
+            getAllSubjects()
+              .filter(sub => subjectGroups[sub] === 'Group 1')
+              .map((subName) => renderSubjectCard(subName))
+          )}
+        </div>
 
-            // Search Query filter
-            if (searchQuery.trim() && !chap.toLowerCase().includes(searchQuery.toLowerCase())) {
-              return false;
-            }
-            // Priority filter
-            if (priorityFilter !== 'ALL' && p !== priorityFilter) {
-              return false;
-            }
-            // Status checkbox filter list (match any selected condition - OR)
-            if (selectedStatuses.length > 0) {
-              const matchesAny = selectedStatuses.some((filterVal) => {
-                if (filterVal === 'NO_CLASS') return !status.classDone;
-                if (filterVal === 'CLASS_DONE') return status.classDone;
-                if (filterVal === 'R1_DONE') return status.revisionCycle >= 1;
-                if (filterVal === 'R2_DONE') return status.revisionCycle >= 2;
-                if (filterVal === 'R3_DONE') return status.revisionCycle >= 3;
-                return true;
-              });
-              if (!matchesAny) return false;
-            }
-
-            return true;
-          });
-
-          // Don't render subject card if searching and no matches found
-          if (searchQuery.trim() && filteredChapters.length === 0) {
-            return null;
-          }
-
-          return (
-            <div key={subName} className="subject-expand-card">
-              <div 
-                className="subject-expand-header"
-                onClick={() => toggleSubjectExpand(subName)}
-              >
-                <div className="subject-header-left">
-                  <div className="subject-header-details">
-                    <span className="subject-name-txt">{subName}</span>
-                    <div className="subject-header-meta">
-                      <span className="subject-progress-badge">{progress}% Done</span>
-                      <span className="subject-chapters-count">{filteredChapters.length} Chapters</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="subject-header-right">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setConfirmDelete({
-                        type: 'subject',
-                        subName
-                      });
-                    }}
-                    className="subject-delete-btn"
-                    title="Delete Subject"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                  {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                </div>
-              </div>
-
-              {/* Progress mini indicator line */}
-              <div className="subject-progress-line-bg">
-                <div 
-                  className="subject-progress-line-fill" 
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-
-              {isExpanded && (
-                <div className="planner-chapters-list slide-up">
-                  {filteredChapters.length === 0 ? (
-                    <p className="no-chapters-filter">
-                      {chapters.length === 0 
-                        ? "This subject is empty. Click + Chapter above to add one!" 
-                        : "No chapters match your filter."}
-                    </p>
-                  ) : (
-                    filteredChapters.map((chap) => {
-                      const status = progressState[subName]?.[chap] || {
-                        classDone: false,
-                        priority: 'C',
-                        ldrs: false,
-                        revisionCycle: 0,
-                      };
-
-                      return (
-                        <div key={chap} className="planner-chapter-card">
-                          {/* Top Row: Class Status & Title & Actions */}
-                          <div className="chapter-card-header">
-                            <div className="class-status-box">
-                              <span className="box-lbl">CLASS</span>
-                              <button
-                                type="button"
-                                onClick={() => onToggleClass(subName, chap)}
-                                className={`class-checkbox ${status.classDone ? 'checked' : ''}`}
-                              >
-                                {status.classDone && <Check size={14} />}
-                              </button>
-                            </div>
-                            <span className="chapter-card-title">{chap}</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setConfirmDelete({
-                                  type: 'chapter',
-                                  subName,
-                                  chapName: chap
-                                });
-                              }}
-                              className="chapter-card-delete"
-                              title="Delete Chapter"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-
-                          {/* Control Row 1: Priority Selection & LDRS marker */}
-                          <div className="chapter-card-controls">
-                            <div className="priority-select-area">
-                              <span className="control-lbl">PRIORITY</span>
-                              <div className="priority-btn-group">
-                                {(['A', 'B', 'C'] as const).map((p) => {
-                                  const isActive = status.priority === p;
-                                  return (
-                                    <button
-                                      key={p}
-                                      type="button"
-                                      onClick={() => onSetPriority(subName, chap, p)}
-                                      className={`priority-btn ${p} ${isActive ? 'active' : ''}`}
-                                    >
-                                      {p}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-
-                            {/* LDRS Toggle button */}
-                            <div className="ldrs-toggle-area">
-                              <span className="control-lbl">LDRS</span>
-                              <button
-                                type="button"
-                                onClick={() => handleLdrClick(subName, chap)}
-                                className={`ldrs-btn ${status.ldrs ? 'active' : ''}`}
-                              >
-                                <Sparkles size={12} fill={status.ldrs ? 'currentColor' : 'none'} />
-                                <span>MARK LDRS</span>
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Control Row 2: Revision Cycle indicators (1, 2, 3) */}
-                          <div className="chapter-card-controls pt-2">
-                            <div className="revision-cycle-area">
-                              <span className="control-lbl">REVISION CYCLE</span>
-                              <div className="cycle-btn-group">
-                                {([1, 2, 3] as const).map((cycleNum) => {
-                                  const isChecked = status.revisionCycle >= cycleNum;
-                                  return (
-                                    <button
-                                      key={cycleNum}
-                                      type="button"
-                                      onClick={() => onToggleRevisionCycle(subName, chap, cycleNum)}
-                                      className={`cycle-btn ${isChecked ? 'active' : ''}`}
-                                    >
-                                      {cycleNum}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-
-                            {/* Resource Actions (watch) */}
-                            <div className="resource-actions-area">
-                              <button
-                                type="button"
-                                onClick={() => handlePlayClick(subName, chap)}
-                                className={`resource-action-btn ${status.videoUrl ? 'has-video' : ''}`}
-                                title={status.videoUrl ? "Watch Lecture" : "Add YouTube Link"}
-                              >
-                                <Play size={14} fill="currentColor" />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {/* Group 2 Section */}
+        <div className="subject-group-section mt-6">
+          <div className="subject-group-header">
+            <span className="group-title-label">Group 2</span>
+            <span className="group-count-badge">
+              {getAllSubjects().filter(sub => subjectGroups[sub] === 'Group 2').length}
+            </span>
+          </div>
+          {getAllSubjects().filter(sub => subjectGroups[sub] === 'Group 2').length === 0 ? (
+            <p className="no-subjects-msg">No Group 2 subjects assigned.</p>
+          ) : (
+            getAllSubjects()
+              .filter(sub => subjectGroups[sub] === 'Group 2')
+              .map((subName) => renderSubjectCard(subName))
+          )}
+        </div>
       </div>
 
       {editingVideo && createPortal(

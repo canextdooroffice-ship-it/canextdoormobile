@@ -53,6 +53,91 @@ const saveToStorage = (key: string, value: unknown) => {
   }
 };
 
+
+// Helper to get local date string YYYY-MM-DD
+const getLocalDateString = (d: Date = new Date()) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+// Calculate unique activity dates from all logs
+const getActivityDates = (
+  checkInHistory: string[],
+  studyHistory: Record<string, number>,
+  wakeHistory: Record<string, string>,
+  sleepHistory: Record<string, string>
+): string[] => {
+  const datesSet = new Set<string>();
+
+  if (checkInHistory && Array.isArray(checkInHistory)) {
+    checkInHistory.forEach(d => {
+      if (d) datesSet.add(d);
+    });
+  }
+
+  if (studyHistory) {
+    Object.entries(studyHistory).forEach(([d, hours]) => {
+      if (hours > 0 && d) {
+        datesSet.add(d);
+      }
+    });
+  }
+
+  if (wakeHistory) {
+    Object.entries(wakeHistory).forEach(([d, val]) => {
+      if (val && val !== 'null' && val !== 'undefined' && d) {
+        datesSet.add(d);
+      }
+    });
+  }
+
+  if (sleepHistory) {
+    Object.entries(sleepHistory).forEach(([d, val]) => {
+      if (val && val !== 'null' && val !== 'undefined' && d) {
+        datesSet.add(d);
+      }
+    });
+  }
+
+  return Array.from(datesSet);
+};
+
+// TS port of the backend python streak calculation logic
+const calculateStreak = (dates: string[]): number => {
+  if (!dates || dates.length === 0) return 0;
+  
+  const uniqueDates = Array.from(new Set(dates)).sort((a, b) => b.localeCompare(a));
+  
+  const today = new Date();
+  const todayStr = getLocalDateString(today);
+  
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = getLocalDateString(yesterday);
+  
+  let streakCount = 0;
+  
+  if (uniqueDates.includes(todayStr) || uniqueDates.includes(yesterdayStr)) {
+    const startDt = uniqueDates.includes(todayStr) ? today : yesterday;
+    const curr = new Date(startDt);
+    
+    while (true) {
+      const currStr = getLocalDateString(curr);
+      if (uniqueDates.includes(currStr)) {
+        streakCount++;
+        curr.setDate(curr.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+  }
+  
+  return streakCount;
+};
+
+
 const buildInitialProgress = (): ProgressState => {
   const state: ProgressState = {};
   Object.values(SYLLABUS_DATA).forEach((levelSyllabus) => {
@@ -97,11 +182,18 @@ function App() {
   );
   const [fullName, setFullName] = useState<string>(() => loadFromStorage(LS_KEYS.FULL_NAME, ''));
   const [examStartDate, setExamStartDate] = useState<string>(() => loadFromStorage(LS_KEYS.EXAM_START_DATE, ''));
+  const [preparingFor, setPreparingFor] = useState<'Group 1' | 'Group 2' | 'Both Groups'>(() => {
+    try {
+      const val = localStorage.getItem('cand_preparingFor');
+      if (val === 'Group 1' || val === 'Group 2' || val === 'Both Groups') return val;
+    } catch { /* ignore */ }
+    return 'Both Groups';
+  });
 
   // Today's study hours (resets each day)
   const [todayHours, setTodayHours] = useState<number>(() => {
     const storedKey = loadFromStorage(LS_KEYS.TODAY_DATE_KEY, '');
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateString();
     if (storedKey === today) {
       return loadFromStorage(LS_KEYS.TODAY_HOURS, 0);
     }
@@ -127,17 +219,83 @@ function App() {
   const [tasks, setTasks] = useState<Task[]>(() => loadFromStorage(LS_KEYS.TASKS, []));
   const [revisions, setRevisions] = useState<RevisionItem[]>(() => loadFromStorage(LS_KEYS.REVISIONS, []));
   const [mistakes, setMistakes] = useState<Mistake[]>(() => loadFromStorage(LS_KEYS.MISTAKES, []));
-  const [streakCount, setStreakCount] = useState<number>(() => loadFromStorage(LS_KEYS.STREAK_COUNT, 0));
-  const [checkedInToday, setCheckedInToday] = useState<boolean>(() => {
-    // Reset check-in flag if it's a new day
-    const lastCheckInDate = loadFromStorage<string>('cand_lastCheckInDate', '');
-    const today = new Date().toISOString().split('T')[0];
-    if (lastCheckInDate !== today) {
-      return false;
+
+  // Study history & planner states
+  const [selectedDate, setSelectedDate] = useState(() => getLocalDateString());
+  const [studyHistory, setStudyHistory] = useState<Record<string, number>>(() => loadFromStorage('cand_studyHistory', {}));
+  const [wakeHistory, setWakeHistory] = useState<Record<string, string>>(() => loadFromStorage('cand_wakeHistory', {}));
+  const [sleepHistory, setSleepHistory] = useState<Record<string, string>>(() => loadFromStorage('cand_sleepHistory', {}));
+  const [studyLogs, setStudyLogs] = useState<StudyLog[]>(() => loadFromStorage('cand_studyLogs', []));
+
+  // Manual Check-In history list
+  const [checkInHistory, setCheckInHistory] = useState<string[]>(() => {
+    const saved = loadFromStorage<string[]>('cand_checkInHistory', []);
+    
+    // Migration: recover old check-in state if present
+    const oldCheckedInToday = loadFromStorage<boolean>(LS_KEYS.CHECKED_IN_TODAY, false);
+    const oldLastCheckInDate = loadFromStorage<string>('cand_lastCheckInDate', '');
+    
+    let initialList = [...saved];
+    if (oldCheckedInToday && oldLastCheckInDate) {
+      if (!initialList.includes(oldLastCheckInDate)) {
+        initialList.push(oldLastCheckInDate);
+      }
     }
-    return loadFromStorage(LS_KEYS.CHECKED_IN_TODAY, false);
+    return initialList;
   });
 
+  // Dynamically derive checked-in status and streak count from all activity logs
+  const checkedInToday = useMemo(() => {
+    return checkInHistory.includes(getLocalDateString());
+  }, [checkInHistory]);
+
+  const streakCount = useMemo(() => {
+    const dates = getActivityDates(checkInHistory, studyHistory, wakeHistory, sleepHistory);
+    return calculateStreak(dates);
+  }, [checkInHistory, studyHistory, wakeHistory, sleepHistory]);
+
+  const handleSetCheckedInToday = useCallback((val: boolean | ((prev: boolean) => boolean)) => {
+    const todayStr = getLocalDateString();
+    setCheckInHistory((prev) => {
+      const currentVal = prev.includes(todayStr);
+      const newVal = typeof val === 'function' ? val(currentVal) : val;
+      
+      let updated: string[];
+      if (newVal) {
+        if (!prev.includes(todayStr)) {
+          updated = [...prev, todayStr];
+        } else {
+          updated = prev;
+        }
+      } else {
+        updated = prev.filter((d) => d !== todayStr);
+      }
+      localStorage.setItem('cand_checkInHistory', JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
+  // Subject grouping (Group 1 / Group 2) mapping
+  const [subjectGroups, setSubjectGroups] = useState<Record<string, 'Group 1' | 'Group 2'>>(() => {
+    return loadFromStorage<Record<string, 'Group 1' | 'Group 2'>>('cand_subjectGroups', {});
+  });
+
+  useEffect(() => {
+    saveToStorage('cand_subjectGroups', subjectGroups);
+  }, [subjectGroups]);
+
+  const handleSetSubjectGroup = useCallback((subName: string, group: 'Group 1' | 'Group 2' | null) => {
+    setSubjectGroups((prev) => {
+      const updated = { ...prev };
+      if (group) {
+        updated[subName] = group;
+      } else {
+        delete updated[subName];
+      }
+      localStorage.setItem('cand_subjectGroups', JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
   // Dark mode state
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     try {
@@ -152,12 +310,36 @@ function App() {
     localStorage.setItem('cand_darkMode', JSON.stringify(darkMode));
   }, [darkMode]);
 
-  // Study history & planner states
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [studyHistory, setStudyHistory] = useState<Record<string, number>>(() => loadFromStorage('cand_studyHistory', {}));
-  const [wakeHistory, setWakeHistory] = useState<Record<string, string>>(() => loadFromStorage('cand_wakeHistory', {}));
-  const [sleepHistory, setSleepHistory] = useState<Record<string, string>>(() => loadFromStorage('cand_sleepHistory', {}));
-  const [studyLogs, setStudyLogs] = useState<StudyLog[]>(() => loadFromStorage('cand_studyLogs', []));
+  const handleAddStudyHours = useCallback((hours: number, label?: string, dateOverride?: string) => {
+    const dateStr = dateOverride || selectedDate;
+    setTotalHours((prev) => parseFloat((prev + hours).toFixed(1)));
+    
+    const todayStr = getLocalDateString();
+    if (dateStr === todayStr) {
+      setTodayHours((prev) => parseFloat((prev + hours).toFixed(1)));
+    }
+    
+    // Update study history for the date
+    setStudyHistory((prev) => {
+      const updated = { ...prev, [dateStr]: parseFloat(((prev[dateStr] || 0) + hours).toFixed(1)) };
+      localStorage.setItem('cand_studyHistory', JSON.stringify(updated));
+      return updated;
+    });
+    // Create a study log entry
+    const newLog: StudyLog = {
+      id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 9),
+      date: dateStr,
+      hours,
+      label: label || 'Study Session',
+      timestamp: new Date().toISOString(),
+    };
+    setStudyLogs((prev) => {
+      const updated = [newLog, ...prev];
+      localStorage.setItem('cand_studyLogs', JSON.stringify(updated));
+      return updated;
+    });
+  }, [selectedDate]);
+
   const [isTimerFullscreen, setIsTimerFullscreen] = useState(false);
   const [isChartFullscreen, setIsChartFullscreen] = useState(false);
   const [stickyTimerVisible, setStickyTimerVisible] = useState(false);
@@ -199,8 +381,7 @@ function App() {
 
             if (timerType === 'focus') {
               const hoursLogged = timerPreset === '50' ? 0.8 : 0.4;
-              setTotalHours((p) => parseFloat((p + hoursLogged).toFixed(1)));
-              setTodayHours((p) => parseFloat((p + hoursLogged).toFixed(1)));
+              handleAddStudyHours(hoursLogged, timerStudyLabel ? `Pomodoro: ${timerStudyLabel}` : 'Pomodoro Focus Session', getLocalDateString());
               showLocalNotification('Focus Session Complete! 🎯', `${timerPreset} minutes logged successfully. Great job!`);
               showToast(`Focus session complete! ${timerPreset} minutes logged successfully.`, 'success');
             } else {
@@ -217,7 +398,7 @@ function App() {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     }
     return () => { if (timerIntervalRef.current) clearInterval(timerIntervalRef.current); };
-  }, [timerRunning, timerType, timerPreset, showLocalNotification]);
+  }, [timerRunning, timerType, timerPreset, showLocalNotification, handleAddStudyHours, timerStudyLabel]);
 
   const handleTimerSelectPreset = useCallback((preset: '25' | '50' | '5') => {
     setTimerRunning(false);
@@ -266,9 +447,10 @@ function App() {
   useEffect(() => { saveToStorage(LS_KEYS.TOTAL_HOURS, totalHours); }, [totalHours]);
   useEffect(() => { saveToStorage(LS_KEYS.FULL_NAME, fullName); }, [fullName]);
   useEffect(() => { saveToStorage(LS_KEYS.EXAM_START_DATE, examStartDate); }, [examStartDate]);
+  useEffect(() => { localStorage.setItem('cand_preparingFor', preparingFor); }, [preparingFor]);
   useEffect(() => {
     saveToStorage(LS_KEYS.TODAY_HOURS, todayHours);
-    saveToStorage(LS_KEYS.TODAY_DATE_KEY, new Date().toISOString().split('T')[0]);
+    saveToStorage(LS_KEYS.TODAY_DATE_KEY, getLocalDateString());
   }, [todayHours]);
   useEffect(() => { saveToStorage(LS_KEYS.SLOTS, slots); }, [slots]);
   useEffect(() => { saveToStorage(LS_KEYS.TASKS, tasks); }, [tasks]);
@@ -278,9 +460,12 @@ function App() {
   useEffect(() => {
     saveToStorage(LS_KEYS.CHECKED_IN_TODAY, checkedInToday);
     if (checkedInToday) {
-      saveToStorage('cand_lastCheckInDate', new Date().toISOString().split('T')[0]);
+      saveToStorage('cand_lastCheckInDate', getLocalDateString());
     }
   }, [checkedInToday]);
+  useEffect(() => {
+    saveToStorage('cand_checkInHistory', checkInHistory);
+  }, [checkInHistory]);
 
 
 
@@ -289,10 +474,10 @@ function App() {
   const hasSyncedRef = useRef(false); // prevent double-load on mount
 
   // Ref to always hold the latest state values for loadCloudData callbacks without stale closure issues
-  const stateRef = useRef({ progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours });
+  const stateRef = useRef({ progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor });
   useEffect(() => {
-    stateRef.current = { progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours };
-  }, [progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours]);
+    stateRef.current = { progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor };
+  }, [progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor]);
 
   // Load cloud data on login (restores progress on new device)
   const loadCloudData = useCallback(async (userId: string) => {
@@ -321,6 +506,9 @@ function App() {
             sleepHistory?: Record<string, string>;
             studyLogs?: StudyLog[];
             todayHours?: number;
+            checkInHistory?: string[];
+            subjectGroups?: Record<string, 'Group 1' | 'Group 2'>;
+            preparingFor?: 'Group 1' | 'Group 2' | 'Both Groups';
             streakMigrated?: boolean;
           };
           setProgressState(packed.checklist || {});
@@ -330,10 +518,23 @@ function App() {
           setSlots(packed.slots || []);
           if (packed.fullName) setFullName(packed.fullName);
           if (packed.examStartDate) setExamStartDate(packed.examStartDate);
-          // Only restore streak from cloud if migration flag is set (avoids stale mock data)
-          if (packed.streakMigrated) {
-            if (packed.streakCount !== undefined) setStreakCount(packed.streakCount);
-            if (packed.checkedInToday !== undefined) setCheckedInToday(packed.checkedInToday);
+          // Load checkInHistory from cloud if present
+          if (packed.checkInHistory) {
+            setCheckInHistory(packed.checkInHistory);
+            localStorage.setItem('cand_checkInHistory', JSON.stringify(packed.checkInHistory));
+          } else if (packed.streakMigrated && packed.checkedInToday && packed.streakCount) {
+            // Fallback for older backups: reconstruct checking history from current status
+            const todayStr = getLocalDateString();
+            setCheckInHistory([todayStr]);
+            localStorage.setItem('cand_checkInHistory', JSON.stringify([todayStr]));
+          }
+          if (packed.subjectGroups) {
+            setSubjectGroups(packed.subjectGroups);
+            localStorage.setItem('cand_subjectGroups', JSON.stringify(packed.subjectGroups));
+          }
+          if (packed.preparingFor) {
+            setPreparingFor(packed.preparingFor);
+            localStorage.setItem('cand_preparingFor', packed.preparingFor);
           }
           if (packed.studyHistory) {
             setStudyHistory(packed.studyHistory);
@@ -364,25 +565,62 @@ function App() {
         setTotalHours(cloud.total_hours);
         console.log('Progress restored from cloud backup.');
       } else {
-        // No cloud data yet → push current local state as first backup
-        const { progressState: ps, caLevel: cl, studyTarget: st, totalHours: th, slots: sl, tasks: tk, revisions: rv, mistakes: ms, fullName: fn, examStartDate: esd, streakCount: sc, checkedInToday: cit, studyHistory: sh, wakeHistory: wh, sleepHistory: sph, studyLogs: slg, todayHours: thrs } = stateRef.current;
-        
-        // Pack state
+        // No cloud data yet (new user ID) → reset study progress/history to prevent inheriting mock data
+        const cl = stateRef.current.caLevel || 'Intermediate';
+        const st = stateRef.current.studyTarget || 6;
+        const fn = stateRef.current.fullName || '';
+
+        const cleanProgress = buildInitialProgress();
+        setProgressState(cleanProgress);
+        setTotalHours(0);
+        setTodayHours(0);
+        setSlots([]);
+        setTasks([]);
+        setRevisions([]);
+        setMistakes([]);
+        setCheckInHistory([]);
+        setStudyHistory({});
+        setWakeHistory({});
+        setSleepHistory({});
+        setStudyLogs([]);
+        setSubjectGroups({});
+        setPreparingFor('Both Groups');
+
+        localStorage.removeItem(LS_KEYS.PROGRESS);
+        localStorage.removeItem(LS_KEYS.TOTAL_HOURS);
+        localStorage.removeItem(LS_KEYS.TODAY_HOURS);
+        localStorage.removeItem(LS_KEYS.SLOTS);
+        localStorage.removeItem(LS_KEYS.TASKS);
+        localStorage.removeItem(LS_KEYS.REVISIONS);
+        localStorage.removeItem(LS_KEYS.MISTAKES);
+        localStorage.removeItem('cand_checkInHistory');
+        localStorage.removeItem('cand_studyHistory');
+        localStorage.removeItem('cand_wakeHistory');
+        localStorage.removeItem('cand_sleepHistory');
+        localStorage.removeItem('cand_studyLogs');
+        localStorage.removeItem('cand_lastCheckInDate');
+        localStorage.removeItem('cand_subjectGroups');
+        localStorage.removeItem('cand_preparingFor');
+
+        // Pack clean state for Supabase
         const packedProgress = {
-          checklist: ps,
-          tasks: tk,
-          revisions: rv,
-          mistakes: ms,
-          slots: sl,
+          checklist: cleanProgress,
+          tasks: [],
+          revisions: [],
+          mistakes: [],
+          slots: [],
           fullName: fn,
-          examStartDate: esd,
-          streakCount: sc,
-          checkedInToday: cit,
-          studyHistory: sh,
-          wakeHistory: wh,
-          sleepHistory: sph,
-          studyLogs: slg,
-          todayHours: thrs,
+          examStartDate: '',
+          streakCount: 0,
+          checkedInToday: false,
+          studyHistory: {},
+          wakeHistory: {},
+          sleepHistory: {},
+          studyLogs: [],
+          todayHours: 0,
+          checkInHistory: [],
+          subjectGroups: {},
+          preparingFor: 'Both Groups',
           streakMigrated: true
         };
 
@@ -390,9 +628,9 @@ function App() {
           progress_state: packedProgress as unknown as ProgressState,
           ca_level: cl,
           study_target: st,
-          total_hours: th,
+          total_hours: 0,
         });
-        console.log('Initial cloud backup created.');
+        console.log('Clean initial cloud backup created.');
       }
     } catch (err) {
       console.warn('Could not sync with Supabase cloud backup:', err);
@@ -422,6 +660,9 @@ function App() {
         sleepHistory,
         studyLogs,
         todayHours,
+        checkInHistory,
+        subjectGroups,
+        preparingFor,
         streakMigrated: true
       };
 
@@ -436,7 +677,7 @@ function App() {
     return () => {
       if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     };
-  }, [progressState, caLevel, studyTarget, totalHours, fullName, examStartDate, tasks, revisions, mistakes, slots, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, session]);
+  }, [progressState, caLevel, studyTarget, totalHours, fullName, examStartDate, tasks, revisions, mistakes, slots, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, session]);
 
 
 
@@ -591,30 +832,12 @@ function App() {
     }
   };
 
-  const handleAddStudyHours = useCallback((hours: number, label?: string) => {
-    const dateStr = selectedDate;
-    setTotalHours((prev) => parseFloat((prev + hours).toFixed(1)));
-    setTodayHours((prev) => parseFloat((prev + hours).toFixed(1)));
-    // Update study history for the date
-    setStudyHistory((prev) => {
-      const updated = { ...prev, [dateStr]: parseFloat(((prev[dateStr] || 0) + hours).toFixed(1)) };
-      localStorage.setItem('cand_studyHistory', JSON.stringify(updated));
-      return updated;
-    });
-    // Create a study log entry
-    const newLog: StudyLog = {
-      id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 9),
-      date: dateStr,
-      hours,
-      label: label || 'Study Session',
-      timestamp: new Date().toISOString(),
-    };
-    setStudyLogs((prev) => {
-      const updated = [newLog, ...prev];
-      localStorage.setItem('cand_studyLogs', JSON.stringify(updated));
-      return updated;
-    });
-  }, [selectedDate]);
+  const handleUpdatePreparingFor = (val: 'Group 1' | 'Group 2' | 'Both Groups') => {
+    setPreparingFor(val);
+    saveToStorage('cand_preparingFor', val);
+  };
+
+
 
   const handleUpdateWakeTime = (time: string) => {
     setWakeHistory((prev) => {
@@ -802,13 +1025,23 @@ function App() {
     setMistakes((prev) => prev.filter((m) => !(m.subjectName === subName && m.chapterName === chapName)));
   };
 
-  const handleAddSubject = (subName: string) => {
+  const handleAddSubject = (subName: string, group: 'Group 1' | 'Group 2' | null) => {
     setProgressState((prev) => {
       if (prev[subName]) return prev;
       return {
         ...prev,
         [subName]: {},
       };
+    });
+    setSubjectGroups((prev) => {
+      const updated = { ...prev };
+      if (group) {
+        updated[subName] = group;
+      } else {
+        delete updated[subName];
+      }
+      localStorage.setItem('cand_subjectGroups', JSON.stringify(updated));
+      return updated;
     });
   };
 
@@ -817,6 +1050,12 @@ function App() {
       const newState = { ...prev };
       delete newState[subName];
       return newState;
+    });
+    setSubjectGroups((prev) => {
+      const updated = { ...prev };
+      delete updated[subName];
+      localStorage.setItem('cand_subjectGroups', JSON.stringify(updated));
+      return updated;
     });
     setRevisions((prev) => prev.filter((r) => r.subjectName !== subName));
     setMistakes((prev) => prev.filter((m) => m.subjectName !== subName));
@@ -867,7 +1106,52 @@ function App() {
     });
   };
 
+  const resetLocalState = () => {
+    setCaLevel('Intermediate');
+    setStudyTarget(6);
+    setTotalHours(0);
+    setProgressState(buildInitialProgress());
+    setFullName('');
+    setExamStartDate('');
+    setTodayHours(0);
+    setSlots([]);
+    setTasks([]);
+    setRevisions([]);
+    setMistakes([]);
+    setCheckInHistory([]);
+    setStudyHistory({});
+    setWakeHistory({});
+    setSleepHistory({});
+    setStudyLogs([]);
+    setSubjectGroups({});
+    setPreparingFor('Both Groups');
+
+    localStorage.removeItem(LS_KEYS.CA_LEVEL);
+    localStorage.removeItem(LS_KEYS.STUDY_TARGET);
+    localStorage.removeItem(LS_KEYS.TOTAL_HOURS);
+    localStorage.removeItem(LS_KEYS.PROGRESS);
+    localStorage.removeItem(LS_KEYS.FULL_NAME);
+    localStorage.removeItem(LS_KEYS.EXAM_START_DATE);
+    localStorage.removeItem(LS_KEYS.TODAY_HOURS);
+    localStorage.removeItem(LS_KEYS.TODAY_DATE_KEY);
+    localStorage.removeItem(LS_KEYS.SLOTS);
+    localStorage.removeItem(LS_KEYS.TASKS);
+    localStorage.removeItem(LS_KEYS.REVISIONS);
+    localStorage.removeItem(LS_KEYS.MISTAKES);
+    localStorage.removeItem(LS_KEYS.STREAK_COUNT);
+    localStorage.removeItem(LS_KEYS.CHECKED_IN_TODAY);
+    localStorage.removeItem('cand_checkInHistory');
+    localStorage.removeItem('cand_studyHistory');
+    localStorage.removeItem('cand_wakeHistory');
+    localStorage.removeItem('cand_sleepHistory');
+    localStorage.removeItem('cand_studyLogs');
+    localStorage.removeItem('cand_lastCheckInDate');
+    localStorage.removeItem('cand_subjectGroups');
+    localStorage.removeItem('cand_preparingFor');
+  };
+
   const handleLogout = () => {
+    resetLocalState();
     setSession(null);
     setActiveTab('home');
     hasSyncedRef.current = false;
@@ -896,11 +1180,12 @@ function App() {
                 slots={slots}
                 setSlots={setSlots}
                 streakCount={streakCount}
-                setStreakCount={setStreakCount}
                 checkedInToday={checkedInToday}
-                setCheckedInToday={setCheckedInToday}
+                setCheckedInToday={handleSetCheckedInToday}
                 darkMode={darkMode}
                 onToggleDarkMode={() => setDarkMode(prev => !prev)}
+                preparingFor={preparingFor}
+                subjectGroups={subjectGroups}
               />
             )}
             {activeTab === 'subjects' && (
@@ -908,6 +1193,8 @@ function App() {
                 showToast={showToast}
                 caLevel={caLevel}
                 progressState={progressState}
+                subjectGroups={subjectGroups}
+                onSetSubjectGroup={handleSetSubjectGroup}
                 onToggleClass={handleToggleClass}
                 onSetPriority={handleSetPriority}
                 onToggleLdrs={handleToggleLdrs}
@@ -985,6 +1272,8 @@ function App() {
                 onUpdateFullName={handleUpdateFullName}
                 examStartDate={examStartDate}
                 onUpdateExamStartDate={setExamStartDate}
+                preparingFor={preparingFor}
+                onUpdatePreparingFor={handleUpdatePreparingFor}
               />
             )}
           </>
