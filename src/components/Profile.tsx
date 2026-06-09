@@ -1,5 +1,5 @@
 import React from 'react';
-import { LogOut, ShieldAlert, Settings, Briefcase, Clock, Layers, Copy, CheckCircle, Calendar } from 'lucide-react';
+import { LogOut, ShieldAlert, Settings, Briefcase, Clock, Layers, Copy, CheckCircle, Calendar, Lock, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { CustomSelect } from './CustomSelect';
 
@@ -58,6 +58,44 @@ export const Profile: React.FC<ProfileProps> = ({
   const [articleshipStartDate, setArticleshipStartDate] = React.useState(() => getStoredValue('cand_articleshipStartDate', ''));
   const [allowedLeaves, setAllowedLeaves] = React.useState(() => parseInt(getStoredValue('cand_allowedLeaves', '0'), 10));
   const [leavesTaken, setLeavesTaken] = React.useState(() => parseInt(getStoredValue('cand_leavesTaken', '0'), 10));
+
+  // Password Update states
+  const [newPassword, setNewPassword] = React.useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = React.useState('');
+  const [showPass, setShowPass] = React.useState(false);
+  const [pwLoading, setPwLoading] = React.useState(false);
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPassword) {
+      showToast('Please enter a new password.', 'warning');
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      showToast('Passwords do not match.', 'error');
+      return;
+    }
+    if (newPassword.length < 6) {
+      showToast('Password must be at least 6 characters long.', 'warning');
+      return;
+    }
+
+    setPwLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) {
+        showToast(error.message, 'error');
+      } else {
+        showToast('Password updated successfully! 🔐', 'success');
+        setNewPassword('');
+        setConfirmNewPassword('');
+      }
+    } catch (err: any) {
+      showToast(err.message || 'An unexpected error occurred.', 'error');
+    } finally {
+      setPwLoading(false);
+    }
+  };
 
   const [prevCaLevel, setPrevCaLevel] = React.useState(caLevel);
   if (caLevel !== prevCaLevel) {
@@ -383,6 +421,84 @@ export const Profile: React.FC<ProfileProps> = ({
         <p className="articleship-record-hint-note">
           Keep your articleship dates updated to accurately track your remaining leaves and plan your exam preparations effectively.
         </p>
+      </div>
+
+      {/* SECTION: Account Security */}
+      <div className="profile-section-card">
+        <div className="profile-section-header orange">
+          <div className="section-icon-badge orange">
+            <Lock size={18} />
+          </div>
+          <h3 className="section-header-title">Account Security</h3>
+        </div>
+
+        <form onSubmit={handleUpdatePassword} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div className="input-group">
+            <label htmlFor="newPassword">New Password</label>
+            <div className="input-wrapper" style={{ position: 'relative' }}>
+              <Lock className="input-icon" size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input
+                id="newPassword"
+                type={showPass ? 'text' : 'password'}
+                placeholder="Enter new password (min. 6 chars)"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="styled-text-input-field"
+                required
+                style={{ paddingLeft: '38px', paddingRight: '40px', boxSizing: 'border-box', width: '100%' }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPass(!showPass)}
+                style={{
+                  position: 'absolute',
+                  right: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: 0
+                }}
+              >
+                {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+          </div>
+
+          <div className="input-group">
+            <label htmlFor="confirmNewPassword">Confirm New Password</label>
+            <div className="input-wrapper" style={{ position: 'relative' }}>
+              <Lock className="input-icon" size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input
+                id="confirmNewPassword"
+                type={showPass ? 'text' : 'password'}
+                placeholder="Confirm your new password"
+                value={confirmNewPassword}
+                onChange={(e) => setConfirmNewPassword(e.target.value)}
+                className="styled-text-input-field"
+                required
+                style={{ paddingLeft: '38px', boxSizing: 'border-box', width: '100%' }}
+              />
+            </div>
+          </div>
+
+          <div className="profile-action-buttons-row mt-3">
+            <button type="submit" className="profile-save-btn" disabled={pwLoading} style={{ width: '100%', justifyContent: 'center' }}>
+              {pwLoading ? (
+                <span className="spinner" style={{ width: '14px', height: '14px' }}></span>
+              ) : (
+                <>
+                  <span>Update Password</span>
+                  <CheckCircle size={15} />
+                </>
+              )}
+            </button>
+          </div>
+        </form>
       </div>
 
       {/* Account / Security Section (Danger Zone) */}

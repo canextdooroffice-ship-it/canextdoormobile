@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Play, Pause, RotateCcw, X, Timer, CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-react';
+import { Play, Pause, RotateCcw, X, Timer, CheckCircle, AlertCircle, Info, AlertTriangle, Lock, Eye, EyeOff } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import { loadFromSupabase, saveToSupabase } from './lib/syncProgress';
 import type { Session } from '@supabase/supabase-js';
@@ -176,6 +176,17 @@ function App() {
 
   const [session, setSession] = useState<Session | null>(null);
   const [activeTab, setActiveTab] = useState<string>('home');
+  
+  // Password Reset state variables
+  const [showResetPasswordModal, setShowResetPasswordModal] = useState<boolean>(false);
+  const [resetPassword, setResetPassword] = useState('');
+  const [confirmResetPassword, setConfirmResetPassword] = useState('');
+  const [showResetPasswordVal, setShowResetPasswordVal] = useState(false);
+  const [resetPasswordLoading, setResetPasswordLoading] = useState(false);
+  const [resetPasswordError, setResetPasswordError] = useState<string | null>(null);
+
+  // Service Worker Update state
+  const [swUpdateWorker, setSwUpdateWorker] = useState<ServiceWorker | null>(null);
   
   // CA Student settings — loaded from localStorage first, then Supabase metadata
   const [caLevel, setCaLevel] = useState<string>(() => loadFromStorage(LS_KEYS.CA_LEVEL, 'Intermediate'));
@@ -598,6 +609,36 @@ function App() {
     setToast({ message, type });
   }, []);
 
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetPasswordError(null);
+    if (resetPassword !== confirmResetPassword) {
+      setResetPasswordError('Passwords do not match');
+      return;
+    }
+    if (resetPassword.length < 6) {
+      setResetPasswordError('Password must be at least 6 characters');
+      return;
+    }
+
+    setResetPasswordLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: resetPassword });
+      if (error) {
+        setResetPasswordError(error.message);
+      } else {
+        showToast('Password updated successfully!', 'success');
+        setShowResetPasswordModal(false);
+        setResetPassword('');
+        setConfirmResetPassword('');
+      }
+    } catch (err: any) {
+      setResetPasswordError(err.message || 'Failed to update password');
+    } finally {
+      setResetPasswordLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (toast) {
       const timer = setTimeout(() => setToast(null), 3000);
@@ -894,13 +935,35 @@ function App() {
   }, [progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests]);
 
   // Load cloud data on login (restores progress on new device)
-  const loadCloudData = useCallback(async (userId: string) => {
+  const loadCloudData = useCallback(async (userId: string, email: string) => {
     if (hasSyncedRef.current) return;
 
     try {
       const cloud = await loadFromSupabase(userId);
       hasSyncedRef.current = true; // only mark synced if load completed successfully (found or not found)
       if (cloud) {
+        // Check if account is active
+        if (cloud.is_active === false) {
+          showToast('Your account has been deactivated by an administrator.', 'error');
+          await supabase.auth.signOut();
+          
+          // Clear local state
+          const keys = [
+            'cand_progress', 'cand_caLevel', 'cand_studyTarget', 'cand_totalHours',
+            'cand_fullName', 'cand_examStartDate', 'cand_todayHours', 'cand_todayDateKey',
+            'cand_schedule_slots', 'cand_planner_tasks', 'cand_revisions', 'cand_mistakes',
+            'cand_streakCount', 'cand_checkedInToday', 'cand_checkInHistory', 'cand_studyHistory',
+            'cand_wakeHistory', 'cand_sleepHistory', 'cand_studyLogs', 'cand_lastCheckInDate',
+            'cand_subjectGroups', 'cand_preparingFor', 'cand_tests'
+          ];
+          keys.forEach(k => localStorage.removeItem(k));
+          
+          setSession(null);
+          setActiveTab('home');
+          hasSyncedRef.current = false;
+          return;
+        }
+
         // Cloud data exists → restore it (overrides local)
         const cloudState = cloud.progress_state;
         if (cloudState && typeof cloudState === 'object' && 'checklist' in cloudState) {
@@ -979,6 +1042,24 @@ function App() {
         setCaLevel(cloud.ca_level);
         setStudyTarget(cloud.study_target);
         setTotalHours(cloud.total_hours);
+        
+        // Backfill email and name if missing in database
+        if (!cloud.email || !cloud.full_name) {
+          let resolvedName = '';
+          if (cloudState && typeof cloudState === 'object' && 'fullName' in cloudState) {
+            resolvedName = (cloudState as any).fullName || '';
+          }
+          if (!resolvedName) resolvedName = stateRef.current.fullName || '';
+
+          saveToSupabase(userId, {
+            progress_state: cloudState,
+            ca_level: cloud.ca_level,
+            study_target: cloud.study_target,
+            total_hours: cloud.total_hours,
+            email: email,
+            full_name: resolvedName
+          });
+        }
         console.log('Progress restored from cloud backup.');
       } else {
         // No cloud data yet (new user ID) → reset study progress/history to prevent inheriting mock data
@@ -1047,6 +1128,8 @@ function App() {
           ca_level: cl,
           study_target: st,
           total_hours: 0,
+          email: email,
+          full_name: fn || '',
         });
         console.log('Clean initial cloud backup created.');
       }
@@ -1090,6 +1173,8 @@ function App() {
         ca_level: caLevel,
         study_target: studyTarget,
         total_hours: totalHours,
+        email: session.user.email || '',
+        full_name: fullName || '',
       });
     }, 2000); // debounce 2 seconds
 
@@ -1097,6 +1182,19 @@ function App() {
       if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     };
   }, [progressState, caLevel, studyTarget, totalHours, fullName, examStartDate, tasks, revisions, mistakes, slots, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, session]);
+
+  // Listen for service worker update events from main.tsx
+  useEffect(() => {
+    const handleUpdateAvailable = (e: Event) => {
+      const worker = (e as CustomEvent).detail as ServiceWorker;
+      setSwUpdateWorker(worker);
+    };
+
+    window.addEventListener('sw-update-available', handleUpdateAvailable);
+    return () => {
+      window.removeEventListener('sw-update-available', handleUpdateAvailable);
+    };
+  }, []);
 
 
 
@@ -1117,15 +1215,18 @@ function App() {
       supabase.auth.getSession().then(({ data: { session: s } }) => {
         setSession(s);
         loadUserMetadata(s);
-        if (s?.user?.id) loadCloudData(s.user.id);
+        if (s?.user?.id) loadCloudData(s.user.id, s.user.email || '');
       }).catch((err) => {
         console.warn('Supabase getSession failed (credentials may be invalid):', err);
       });
 
-      const { data } = supabase.auth.onAuthStateChange((_event, s) => {
+      const { data } = supabase.auth.onAuthStateChange((event, s) => {
         setSession(s);
         loadUserMetadata(s);
-        if (s?.user?.id) loadCloudData(s.user.id);
+        if (s?.user?.id) loadCloudData(s.user.id, s.user.email || '');
+        if (event === 'PASSWORD_RECOVERY') {
+          setShowResetPasswordModal(true);
+        }
       });
       subscription = data.subscription;
     } catch (err) {
@@ -1784,6 +1885,150 @@ function App() {
             {toast.type === 'warning' && <AlertTriangle size={16} className="toast-icon warning" />}
             {toast.type === 'info' && <Info size={16} className="toast-icon info" />}
             <span>{toast.message}</span>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Password Reset Modal Portal */}
+      {showResetPasswordModal && createPortal(
+        <div className="matrix-modal-overlay">
+          <div className="matrix-modal-card" style={{ maxWidth: '380px' }}>
+            <div className="matrix-modal-header" style={{ marginBottom: '12px' }}>
+              <div>
+                <h2 className="matrix-modal-title">Reset Your Password</h2>
+                <p className="matrix-modal-subtitle">Set a secure new password for your account</p>
+              </div>
+              <button 
+                type="button" 
+                className="matrix-modal-close-btn"
+                onClick={() => setShowResetPasswordModal(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleResetPasswordSubmit} className="auth-form" style={{ gap: '12px', marginTop: '8px' }}>
+              {resetPasswordError && (
+                <div className="auth-alert error" style={{ margin: '0 0 12px 0', padding: '10px', borderRadius: '8px' }}>
+                  <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                  <span style={{ fontSize: '12px' }}>{resetPasswordError}</span>
+                </div>
+              )}
+
+              <div className="input-group">
+                <label htmlFor="modalNewPassword">New Password</label>
+                <div className="input-wrapper">
+                  <Lock className="input-icon" size={18} />
+                  <input
+                    id="modalNewPassword"
+                    type={showResetPasswordVal ? 'text' : 'password'}
+                    placeholder="Enter new password (min. 6 chars)"
+                    value={resetPassword}
+                    onChange={(e) => setResetPassword(e.target.value)}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '10px 40px 10px 36px',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '10px',
+                      fontSize: '13px',
+                      backgroundColor: 'var(--bg-secondary)',
+                      color: 'var(--text-primary)',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle"
+                    onClick={() => setShowResetPasswordVal(!showResetPasswordVal)}
+                    tabIndex={-1}
+                    style={{
+                      position: 'absolute',
+                      right: '12px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: 0
+                    }}
+                  >
+                    {showResetPasswordVal ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="input-group">
+                <label htmlFor="modalConfirmPassword">Confirm Password</label>
+                <div className="input-wrapper">
+                  <Lock className="input-icon" size={18} />
+                  <input
+                    id="modalConfirmPassword"
+                    type={showResetPasswordVal ? 'text' : 'password'}
+                    placeholder="Confirm your new password"
+                    value={confirmResetPassword}
+                    onChange={(e) => setConfirmResetPassword(e.target.value)}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '10px 40px 10px 36px',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '10px',
+                      fontSize: '13px',
+                      backgroundColor: 'var(--bg-secondary)',
+                      color: 'var(--text-primary)',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="matrix-modal-actions" style={{ marginTop: '16px', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="matrix-modal-cancel-btn"
+                  onClick={() => setShowResetPasswordModal(false)}
+                  style={{ flex: 1 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="matrix-modal-save-btn"
+                  disabled={resetPasswordLoading}
+                  style={{ flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  {resetPasswordLoading ? <span className="spinner" style={{ width: '16px', height: '16px' }}></span> : 'Save Password'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Service Worker Update Banner */}
+      {swUpdateWorker && createPortal(
+        <div className="update-banner">
+          <div className="update-banner-content">
+            <Info className="update-banner-icon" size={18} />
+            <div className="update-banner-text">
+              <span className="update-title">Update Available! ✨</span>
+              <span className="update-subtitle">A new version of CA Next Door is ready.</span>
+            </div>
+            <button 
+              type="button" 
+              className="update-action-btn"
+              onClick={() => {
+                swUpdateWorker.postMessage({ type: 'SKIP_WAITING' });
+              }}
+            >
+              Update Now
+            </button>
           </div>
         </div>,
         document.body

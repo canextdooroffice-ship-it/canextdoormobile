@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ca-next-door-v1';
+const CACHE_NAME = 'ca-next-door-v20260609T155200985Z';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -14,7 +14,6 @@ self.addEventListener('install', (event) => {
       return cache.addAll(ASSETS_TO_CACHE);
     })
   );
-  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
@@ -93,4 +92,11 @@ self.addEventListener('notificationclick', (event) => {
       return self.clients.openWindow('/');
     })
   );
+});
+
+// Skip waiting when requested by the client
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });

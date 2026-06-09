@@ -4,29 +4,71 @@
 -- ============================================
 
 CREATE TABLE IF NOT EXISTS user_progress (
-  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id    UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL UNIQUE,
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id         UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL UNIQUE,
   progress_state  JSONB    DEFAULT '{}',
   ca_level        TEXT     DEFAULT 'Intermediate',
   study_target    INTEGER  DEFAULT 6,
   total_hours     NUMERIC  DEFAULT 0,
+  email           TEXT,
+  full_name       TEXT,
+  is_active       BOOLEAN  DEFAULT TRUE,
   updated_at      TIMESTAMPTZ DEFAULT now()
 );
+
+-- Add columns if they do not exist (migration helper for existing tables)
+ALTER TABLE user_progress ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE user_progress ADD COLUMN IF NOT EXISTS full_name TEXT;
+ALTER TABLE user_progress ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
 
 -- Enable Row Level Security so each user only sees their own data
 ALTER TABLE user_progress ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if we are re-running to avoid errors
+DROP POLICY IF EXISTS "Users can view own progress" ON user_progress;
+DROP POLICY IF EXISTS "Users can insert own progress" ON user_progress;
+DROP POLICY IF EXISTS "Users can update own progress" ON user_progress;
+DROP POLICY IF EXISTS "Admins can view all user progress" ON user_progress;
+DROP POLICY IF EXISTS "Admins can update all user progress" ON user_progress;
+
+-- User Policies
 CREATE POLICY "Users can view own progress"
   ON user_progress FOR SELECT
   USING (auth.uid() = user_id);
 
 CREATE POLICY "Users can insert own progress"
   ON user_progress FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
+  WITH CHECK (auth.uid() = user_id AND is_active = true);
 
 CREATE POLICY "Users can update own progress"
   ON user_progress FOR UPDATE
-  USING (auth.uid() = user_id);
+  USING (auth.uid() = user_id AND is_active = true)
+  WITH CHECK (auth.uid() = user_id AND is_active = true);
+
+-- Admin Policies
+CREATE POLICY "Admins can view all user progress"
+  ON user_progress FOR SELECT
+  USING (
+    (auth.jwt() -> 'user_metadata' ->> 'is_admin')::boolean = true OR
+    auth.jwt() ->> 'email' = 'chitranshagrawal005@gmail.com' OR
+    auth.jwt() ->> 'email' = 'admin@gmail.com' OR
+    auth.jwt() ->> 'email' LIKE '%@canextdoor.com'
+  );
+
+CREATE POLICY "Admins can update all user progress"
+  ON user_progress FOR UPDATE
+  USING (
+    (auth.jwt() -> 'user_metadata' ->> 'is_admin')::boolean = true OR
+    auth.jwt() ->> 'email' = 'chitranshagrawal005@gmail.com' OR
+    auth.jwt() ->> 'email' = 'admin@gmail.com' OR
+    auth.jwt() ->> 'email' LIKE '%@canextdoor.com'
+  )
+  WITH CHECK (
+    (auth.jwt() -> 'user_metadata' ->> 'is_admin')::boolean = true OR
+    auth.jwt() ->> 'email' = 'chitranshagrawal005@gmail.com' OR
+    auth.jwt() ->> 'email' = 'admin@gmail.com' OR
+    auth.jwt() ->> 'email' LIKE '%@canextdoor.com'
+  );
 
 -- ============================================
 -- Dynamic Mock Test Papers Table
