@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, ChevronUp, Trash2, Plus, Search, Filter, Play, Sparkles, Check, CheckCircle, Bold, Italic, Underline, List, Highlighter, Palette } from 'lucide-react';
+import { ChevronDown, ChevronUp, Trash2, Plus, Search, Filter, Play, Sparkles, Check, CheckCircle, Bold, Italic, Underline, List, Highlighter, Palette, ClipboardList } from 'lucide-react';
 import { SYLLABUS_DATA } from '../constants/syllabus';
 
 export interface ChapterStatus {
@@ -35,6 +35,7 @@ interface SubjectsProps {
   onDeleteSubject: (subName: string) => void;
   onSetVideoUrl: (subName: string, chapName: string, url: string) => void;
   onSetLdrNotes: (subName: string, chapName: string, notes: string, ldrs: boolean) => void;
+  onOpenTestPage: () => void;
 }
 
 export const Subjects: React.FC<SubjectsProps> = ({
@@ -52,6 +53,7 @@ export const Subjects: React.FC<SubjectsProps> = ({
   onDeleteSubject,
   onSetVideoUrl,
   onSetLdrNotes,
+  onOpenTestPage,
 }) => {
   const currentSyllabus = (SYLLABUS_DATA[caLevel as keyof typeof SYLLABUS_DATA] || SYLLABUS_DATA.Intermediate) as Record<string, string[]>;
 
@@ -454,6 +456,15 @@ export const Subjects: React.FC<SubjectsProps> = ({
           <h2 className="welcome-title">My Subjects</h2>
           <p className="welcome-subtitle">Manage priorities, classes & revisions</p>
         </div>
+        <button
+          type="button"
+          onClick={onOpenTestPage}
+          className="test-navigation-btn"
+          title="Open Mock Tests"
+        >
+          <ClipboardList size={16} />
+          <span>Mock Tests</span>
+        </button>
       </div>
 
       {/* Filter and Search Section */}

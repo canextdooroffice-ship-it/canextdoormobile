@@ -34,6 +34,11 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
         return;
       }
 
+      const isAdminEmail = 
+        email.toLowerCase().trim().endsWith('@canextdoor.com') || 
+        email.toLowerCase().trim() === 'admin@gmail.com' || 
+        email.toLowerCase().trim() === 'chitranshagrawal005@gmail.com';
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -41,6 +46,7 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
           data: {
             ca_level: 'Foundation', // Default value
             study_hours_target: 6,
+            is_admin: isAdminEmail,
           }
         }
       });

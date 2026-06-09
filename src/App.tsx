@@ -11,6 +11,10 @@ import { Planner } from './components/Planner';
 import { Analytics } from './components/Analytics';
 import { Profile } from './components/Profile';
 import { Subjects } from './components/Subjects';
+import { Test } from './components/Test';
+import type { TestRecord } from './components/Test';
+import { AdminPanel } from './components/AdminPanel';
+import type { MockTestPaper } from './constants/mockTests';
 import { SYLLABUS_DATA } from './constants/syllabus';
 import type { ProgressState } from './components/Subjects';
 import type { ScheduleSlot } from './components/Dashboard';
@@ -180,6 +184,143 @@ function App() {
   const [progressState, setProgressState] = useState<ProgressState>(() =>
     loadFromStorage<ProgressState>(LS_KEYS.PROGRESS, buildInitialProgress())
   );
+  const [tests, setTests] = useState<TestRecord[]>(() => loadFromStorage<TestRecord[]>('cand_tests', []));
+  const [dynamicPapers, setDynamicPapers] = useState<MockTestPaper[]>([]);
+  const isAdmin = useMemo(() => {
+    if (!session?.user) return false;
+    const email = session.user.email?.toLowerCase().trim() || '';
+    return (
+      session.user.user_metadata?.is_admin === true ||
+      email.endsWith('@canextdoor.com') ||
+      email === 'admin@gmail.com' ||
+      email === 'chitranshagrawal005@gmail.com'
+    );
+  }, [session]);
+
+  const fetchDynamicPapers = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('mock_papers')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        const mapped: MockTestPaper[] = data.map((row: any) => ({
+          id: row.id,
+          title: row.title,
+          type: row.type,
+          totalMarks: row.total_marks,
+          questions: row.questions,
+          level: row.level,
+          subject: row.subject
+        } as any));
+        setDynamicPapers(mapped);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch dynamic papers:', err);
+    }
+  }, []);
+
+  // Fetch dynamic papers and listen to realtime updates
+  useEffect(() => {
+    fetchDynamicPapers();
+
+    const channel = supabase
+      .channel('mock_papers_realtime_sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'mock_papers' },
+        (payload) => {
+          console.log('Realtime change in mock_papers table:', payload);
+          fetchDynamicPapers();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchDynamicPapers]);
+
+  const [globalSubjects, setGlobalSubjects] = useState<any[]>([]);
+
+  const fetchGlobalSubjects = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('global_subjects')
+        .select('*')
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        setGlobalSubjects(data);
+        
+        const STATIC_SUBJECT_KEYS = new Set([
+          'Paper 1: Financial Reporting',
+          'Paper 2: Advanced Financial Management',
+          'Paper 3: Advanced Auditing and Assurance',
+          'Paper 4: Direct Tax and International Taxation',
+          'Paper 5: Indirect Taxation and Customs',
+          'Advanced Accounting',
+          'Corporate & Other Laws',
+          'Taxation (DT & IDT)',
+          'Cost & Management Accounting',
+          'Principles & Practice of Accounting',
+          'Business Laws',
+          'Quantitative Aptitude',
+          'Business Economics'
+        ]);
+
+        // Prune any dynamic subjects that are no longer in Supabase
+        Object.keys(SYLLABUS_DATA).forEach((levelStr) => {
+          const lvl = levelStr as keyof typeof SYLLABUS_DATA;
+          Object.keys(SYLLABUS_DATA[lvl]).forEach((subName) => {
+            if (!STATIC_SUBJECT_KEYS.has(subName)) {
+              delete (SYLLABUS_DATA[lvl] as any)[subName];
+            }
+          });
+        });
+        
+        // Dynamically merge/overwrite into SYLLABUS_DATA constant
+        data.forEach((sub: any) => {
+          const lvl = sub.level as keyof typeof SYLLABUS_DATA;
+          if (SYLLABUS_DATA[lvl]) {
+            (SYLLABUS_DATA[lvl] as any)[sub.name] = sub.chapters || [];
+          }
+        });
+      }
+    } catch (err) {
+      console.warn('Failed to fetch global subjects:', err);
+    }
+  }, []);
+
+  // Fetch global subjects and listen to realtime updates
+  useEffect(() => {
+    fetchGlobalSubjects();
+
+    const channel = supabase
+      .channel('global_subjects_realtime_sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'global_subjects' },
+        (payload) => {
+          console.log('Realtime change in global_subjects table:', payload);
+          fetchGlobalSubjects();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchGlobalSubjects]);
 
   // Ensure default subjects and their chapters for current caLevel are initialized in progressState,
   // and prune default subjects and items of other levels, and prune any stale mock chapters.
@@ -736,6 +877,9 @@ function App() {
   useEffect(() => {
     saveToStorage('cand_checkInHistory', checkInHistory);
   }, [checkInHistory]);
+  useEffect(() => {
+    saveToStorage('cand_tests', tests);
+  }, [tests]);
 
 
 
@@ -744,10 +888,10 @@ function App() {
   const hasSyncedRef = useRef(false); // prevent double-load on mount
 
   // Ref to always hold the latest state values for loadCloudData callbacks without stale closure issues
-  const stateRef = useRef({ progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor });
+  const stateRef = useRef({ progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests });
   useEffect(() => {
-    stateRef.current = { progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor };
-  }, [progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor]);
+    stateRef.current = { progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests };
+  }, [progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests]);
 
   // Load cloud data on login (restores progress on new device)
   const loadCloudData = useCallback(async (userId: string) => {
@@ -779,6 +923,7 @@ function App() {
             checkInHistory?: string[];
             subjectGroups?: Record<string, 'Group 1' | 'Group 2'>;
             preparingFor?: 'Group 1' | 'Group 2' | 'Both Groups';
+            tests?: TestRecord[];
             streakMigrated?: boolean;
           };
           setProgressState(packed.checklist || {});
@@ -786,6 +931,7 @@ function App() {
           setRevisions(packed.revisions || []);
           setMistakes(packed.mistakes || []);
           setSlots(packed.slots || []);
+          setTests(packed.tests || []);
           if (packed.fullName) setFullName(packed.fullName);
           if (packed.examStartDate) setExamStartDate(packed.examStartDate);
           // Load checkInHistory from cloud if present
@@ -871,6 +1017,7 @@ function App() {
         localStorage.removeItem('cand_lastCheckInDate');
         localStorage.removeItem('cand_subjectGroups');
         localStorage.removeItem('cand_preparingFor');
+        localStorage.removeItem('cand_tests');
 
         // Pack clean state for Supabase
         const packedProgress = {
@@ -891,6 +1038,7 @@ function App() {
           checkInHistory: [],
           subjectGroups: {},
           preparingFor: 'Both Groups',
+          tests: [],
           streakMigrated: true
         };
 
@@ -933,6 +1081,7 @@ function App() {
         checkInHistory,
         subjectGroups,
         preparingFor,
+        tests,
         streakMigrated: true
       };
 
@@ -947,7 +1096,7 @@ function App() {
     return () => {
       if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     };
-  }, [progressState, caLevel, studyTarget, totalHours, fullName, examStartDate, tasks, revisions, mistakes, slots, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, session]);
+  }, [progressState, caLevel, studyTarget, totalHours, fullName, examStartDate, tasks, revisions, mistakes, slots, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, session]);
 
 
 
@@ -1395,6 +1544,7 @@ function App() {
     setStudyLogs([]);
     setSubjectGroups({});
     setPreparingFor('Both Groups');
+    setTests([]);
 
     localStorage.removeItem(LS_KEYS.CA_LEVEL);
     localStorage.removeItem(LS_KEYS.STUDY_TARGET);
@@ -1418,6 +1568,7 @@ function App() {
     localStorage.removeItem('cand_lastCheckInDate');
     localStorage.removeItem('cand_subjectGroups');
     localStorage.removeItem('cand_preparingFor');
+    localStorage.removeItem('cand_tests');
   };
 
   const handleLogout = () => {
@@ -1475,6 +1626,19 @@ function App() {
                 onDeleteSubject={handleDeleteSubject}
                 onSetVideoUrl={handleSetVideoUrl}
                 onSetLdrNotes={handleSetLdrNotes}
+                onOpenTestPage={() => setActiveTab('test')}
+              />
+            )}
+            {activeTab === 'test' && (
+              <Test
+                showToast={showToast}
+                caLevel={caLevel}
+                onChangeCaLevel={handleUpdateCaLevel}
+                progressState={progressState}
+                tests={tests}
+                setTests={setTests}
+                onBack={() => setActiveTab('subjects')}
+                dynamicPapers={dynamicPapers}
               />
             )}
             {activeTab === 'planner' && (
@@ -1546,6 +1710,15 @@ function App() {
                 onUpdatePreparingFor={handleUpdatePreparingFor}
               />
             )}
+            {activeTab === 'admin' && isAdmin && (
+              <AdminPanel
+                showToast={showToast}
+                dynamicPapers={dynamicPapers}
+                onRefresh={fetchDynamicPapers}
+                globalSubjects={globalSubjects}
+                onRefreshGlobalSubjects={fetchGlobalSubjects}
+              />
+            )}
           </>
         )}
       </div>
@@ -1599,7 +1772,7 @@ function App() {
 
       {/* bottom navigation bar visible only when authorized and not in fullscreen mode */}
       {session && !isTimerFullscreen && !isChartFullscreen && (
-        <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
+        <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} isAdmin={isAdmin} />
       )}
 
       {/* Sleek App Toast Notifications Portal */}

@@ -1,12 +1,13 @@
 import React from 'react';
-import { Home, BookOpen, Calendar, BarChart2, User } from 'lucide-react';
+import { Home, BookOpen, Calendar, BarChart2, User, Shield } from 'lucide-react';
 
 interface BottomNavProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  isAdmin?: boolean;
 }
 
-export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab }) => {
+export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab, isAdmin }) => {
   const navItems = [
     { id: 'home', label: 'Home', icon: Home },
     { id: 'subjects', label: 'Subjects', icon: BookOpen },
@@ -14,6 +15,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab })
     { id: 'analytics', label: 'Analytics', icon: BarChart2 },
     { id: 'profile', label: 'Profile', icon: User },
   ];
+
+  if (isAdmin) {
+    navItems.push({ id: 'admin', label: 'Admin', icon: Shield });
+  }
 
   return (
     <nav className="bottom-nav">
