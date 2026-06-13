@@ -32,16 +32,21 @@ interface StudyBuddyProps {
 }
 
 // Helper: Calculate progress percentage based on 3 criteria weighted score
-const calculateWeightedProgress = (progressState: any, subjectGroups: any): number => {
+const calculateWeightedProgress = (progressState: any, fallbackSubjectGroups: any): number => {
   if (!progressState) return 0;
-  const subjects = Object.keys(progressState);
+
+  // Extract checklist and subjectGroups from the packed cloud state if present
+  const actualProgress = progressState.checklist ? progressState.checklist : progressState;
+  const actualSubjectGroups = progressState.subjectGroups ? progressState.subjectGroups : fallbackSubjectGroups;
+
+  const subjects = Object.keys(actualProgress);
   if (subjects.length === 0) return 0;
 
   let totalWeightedPoints = 0;
   let totalWeight = 0;
 
   subjects.forEach(subName => {
-    const chaptersObj = progressState[subName];
+    const chaptersObj = actualProgress[subName];
     if (!chaptersObj) return;
 
     const chapters = Object.keys(chaptersObj);
@@ -62,8 +67,8 @@ const calculateWeightedProgress = (progressState: any, subjectGroups: any): numb
 
     // Determine weight
     let weight = 1.0;
-    if (subjectGroups) {
-      const group = subjectGroups[subName];
+    if (actualSubjectGroups) {
+      const group = actualSubjectGroups[subName];
       if (group === 'Group 1' || group === 'Group 2') {
         weight = 1.5;
       }
