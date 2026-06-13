@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, Users, UserPlus, Copy, User, Check, X, Plus, LogIn } from 'lucide-react';
+import { ArrowLeft, Users, UserPlus, Copy, User, Check, X, Plus, LogIn, RefreshCw } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
 interface Buddy {
@@ -129,6 +129,7 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
   const [buddyCodeInput, setBuddyCodeInput] = useState('');
   const [copied, setCopied] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Group Form states
   const [isJoinGroupOpen, setIsJoinGroupOpen] = useState(false);
@@ -154,44 +155,89 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
     localStorage.setItem('cand_study_groups_v2', JSON.stringify(groups));
   }, [groups]);
 
-  // Update buddies progress and status from Supabase on mount
-  useEffect(() => {
-    const fetchLatestBuddiesInfo = async () => {
-      // Filter out mock IDs (UUIDs have 36 chars and contain hyphens)
-      const actualUserIds = buddies.filter(b => b.id.includes('-')).map(b => b.id);
-      if (actualUserIds.length === 0) return;
+  // Function to manually refresh buddies from Supabase with visual indicators
+  const fetchLatestBuddiesInfo = async () => {
+    const actualUserIds = buddies.filter(b => b.id.includes('-')).map(b => b.id);
+    if (actualUserIds.length === 0) {
+      showToastMsg('No actual users to refresh!');
+      return;
+    }
 
-      try {
-        const { data, error } = await supabase
-          .from('user_progress')
-          .select('user_id, full_name, email, progress_state, is_active')
-          .in('user_id', actualUserIds);
+    setRefreshing(true);
+    showToastMsg('Refreshing buddies progress...');
 
-        if (error) throw error;
+    try {
+      const { data, error } = await supabase
+        .from('user_progress')
+        .select('user_id, full_name, email, progress_state, is_active')
+        .in('user_id', actualUserIds);
 
-        if (data && data.length > 0) {
-          setBuddies(prev => prev.map(buddy => {
-            const match = data.find(row => row.user_id === buddy.id);
-            if (match) {
-              const name = match.full_name || match.email || buddy.name;
-              const completion = calculateWeightedProgress(match.progress_state, subjectGroups);
-              const status = match.is_active ? 'Online' : 'Offline';
-              return {
-                ...buddy,
-                name,
-                completionPercentage: completion,
-                status
-              };
-            }
-            return buddy;
-          }));
-        }
-      } catch (err) {
-        console.warn('Failed to update buddies from Supabase:', err);
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        setBuddies(prev => prev.map(buddy => {
+          const match = data.find(row => row.user_id === buddy.id);
+          if (match) {
+            const name = match.full_name || match.email || buddy.name;
+            const completion = calculateWeightedProgress(match.progress_state, subjectGroups);
+            const status = match.is_active ? 'Online' : 'Offline';
+            return {
+              ...buddy,
+              name,
+              completionPercentage: completion,
+              status
+            };
+          }
+          return buddy;
+        }));
+        showToastMsg('Buddies progress updated! 🔄');
+      } else {
+        showToastMsg('All buddies are up to date! 🤝');
       }
-    };
+    } catch (err) {
+      console.warn('Failed to update buddies from Supabase:', err);
+      showToastMsg('Refresh failed. Try again.');
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
-    fetchLatestBuddiesInfo();
+  // Update buddies progress and status silently from Supabase on mount
+  useEffect(() => {
+    const actualUserIds = buddies.filter(b => b.id.includes('-')).map(b => b.id);
+    if (actualUserIds.length > 0) {
+      const silentFetch = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('user_progress')
+            .select('user_id, full_name, email, progress_state, is_active')
+            .in('user_id', actualUserIds);
+
+          if (error) throw error;
+
+          if (data && data.length > 0) {
+            setBuddies(prev => prev.map(buddy => {
+              const match = data.find(row => row.user_id === buddy.id);
+              if (match) {
+                const name = match.full_name || match.email || buddy.name;
+                const completion = calculateWeightedProgress(match.progress_state, subjectGroups);
+                const status = match.is_active ? 'Online' : 'Offline';
+                return {
+                  ...buddy,
+                  name,
+                  completionPercentage: completion,
+                  status
+                };
+              }
+              return buddy;
+            }));
+          }
+        } catch (err) {
+          console.warn('Silent mount fetch failed:', err);
+        }
+      };
+      silentFetch();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -581,6 +627,16 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
         <h2 className="study-buddy-header-title">
           {activeStudyRoom ? 'Leaderboard' : 'Study Buddy'}
         </h2>
+        <button
+          type="button"
+          className="study-buddy-refresh-btn"
+          onClick={fetchLatestBuddiesInfo}
+          disabled={refreshing}
+          aria-label="Refresh buddies"
+          title="Refresh buddies"
+        >
+          <RefreshCw size={16} className={refreshing ? 'spin' : ''} />
+        </button>
       </div>
 
       {activeStudyRoom ? (

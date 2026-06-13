@@ -10058,6 +10058,42 @@ body.dark .time-table-row:hover {
   margin-right: auto;
 }
 
+.study-buddy-refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 8px;
+  border-radius: 12px;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+}
+
+.study-buddy-refresh-btn:hover {
+  background-color: var(--bg-card-hover);
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+
+.study-buddy-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.study-buddy-refresh-btn .spin {
+  animation: spin-refresh 1s linear infinite;
+}
+
+@keyframes spin-refresh {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
 /* Toast Notifications */
 .study-buddy-toast {
   position: fixed;
