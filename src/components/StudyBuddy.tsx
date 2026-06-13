@@ -222,13 +222,23 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
       return;
     }
 
-    // Generate mock name based on code
-    const generatedNames = ['Karan Mehta', 'Divya Nair', 'Amit Shah', 'Prerna Sen', 'Vikram Rao', 'Siddharth Jain'];
-    const randomName = generatedNames[Math.floor(Math.random() * generatedNames.length)];
+    // Resolve name deterministically based on code
+    const namePart = cleanCode.replace('CA-', '').substring(0, 4);
+    const nameMapping: Record<string, string> = {
+      'KARA': 'Karan Mehta',
+      'DIVY': 'Divya Nair',
+      'AMIT': 'Amit Shah',
+      'PRER': 'Prerna Sen',
+      'VIKR': 'Vikram Rao',
+      'SIDD': 'Siddharth Jain'
+    };
+    const resolvedName = nameMapping[namePart] || (namePart.length > 0 
+      ? `${namePart.charAt(0) + namePart.substring(1).toLowerCase()} Sharma` 
+      : 'Study Buddy');
 
     const newBuddy: Buddy = {
       id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 9),
-      name: randomName,
+      name: resolvedName,
       code: cleanCode,
       status: Math.random() > 0.4 ? 'Studying' : 'Online',
       completionPercentage: Math.floor(Math.random() * 71) + 25
@@ -236,7 +246,7 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
 
     setBuddies(prev => [newBuddy, ...prev]);
     setBuddyCodeInput('');
-    showToastMsg(`Added buddy: ${randomName}! 🤝`);
+    showToastMsg(`Added buddy: ${resolvedName}! 🤝`);
   };
 
   // Remove Buddy
