@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, Users, UserPlus, Copy, User, Check, X, Plus, LogIn } from 'lucide-react';
+import { supabase } from '../supabaseClient';
 
 interface Buddy {
   id: string;
@@ -30,6 +31,52 @@ interface StudyBuddyProps {
   onBack: () => void;
 }
 
+// Helper: Calculate progress percentage based on 3 criteria weighted score
+const calculateWeightedProgress = (progressState: any, subjectGroups: any): number => {
+  if (!progressState) return 0;
+  const subjects = Object.keys(progressState);
+  if (subjects.length === 0) return 0;
+
+  let totalWeightedPoints = 0;
+  let totalWeight = 0;
+
+  subjects.forEach(subName => {
+    const chaptersObj = progressState[subName];
+    if (!chaptersObj) return;
+
+    const chapters = Object.keys(chaptersObj);
+    if (chapters.length === 0) return;
+
+    let completedPoints = 0;
+    const totalPoints = chapters.length * 4; // 1 (Class) + 3 (Revisions)
+
+    chapters.forEach(chap => {
+      const status = chaptersObj[chap];
+      if (status) {
+        if (status.classDone) completedPoints++;
+        completedPoints += Math.min(status.revisionCycle, 3);
+      }
+    });
+
+    const subProgress = totalPoints > 0 ? (completedPoints / totalPoints) : 0;
+
+    // Determine weight
+    let weight = 1.0;
+    if (subjectGroups) {
+      const group = subjectGroups[subName];
+      if (group === 'Group 1' || group === 'Group 2') {
+        weight = 1.5;
+      }
+    }
+
+    totalWeightedPoints += subProgress * weight;
+    totalWeight += weight;
+  });
+
+  if (totalWeight === 0) return 0;
+  return Math.round((totalWeightedPoints / totalWeight) * 100);
+};
+
 export const StudyBuddy: React.FC<StudyBuddyProps> = ({
   userId,
   userFullName,
@@ -52,49 +99,7 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
 
   // Calculate user's weighted completion percentage
   const userCompletionPercentage = useMemo(() => {
-    if (!progressState) return 0;
-    const subjects = Object.keys(progressState);
-    if (subjects.length === 0) return 0;
-
-    let totalWeightedPoints = 0;
-    let totalWeight = 0;
-
-    subjects.forEach(subName => {
-      const chaptersObj = progressState[subName];
-      if (!chaptersObj) return;
-
-      const chapters = Object.keys(chaptersObj);
-      if (chapters.length === 0) return;
-
-      // Calculate subject progress points
-      let completedPoints = 0;
-      const totalPoints = chapters.length * 4; // 1 (Class) + 3 (Revisions)
-
-      chapters.forEach(chap => {
-        const status = chaptersObj[chap];
-        if (status) {
-          if (status.classDone) completedPoints++;
-          completedPoints += Math.min(status.revisionCycle, 3);
-        }
-      });
-
-      const subProgress = totalPoints > 0 ? (completedPoints / totalPoints) : 0;
-
-      // Determine weight
-      const group = subjectGroups[subName];
-      let weight = 1.0; // No Group default
-      if (group === 'Group 1') {
-        weight = 1.5;
-      } else if (group === 'Group 2') {
-        weight = 1.5;
-      }
-
-      totalWeightedPoints += subProgress * weight;
-      totalWeight += weight;
-    });
-
-    if (totalWeight === 0) return 0;
-    return Math.round((totalWeightedPoints / totalWeight) * 100);
+    return calculateWeightedProgress(progressState, subjectGroups);
   }, [progressState, subjectGroups]);
 
   // Tabs: 'buddies' | 'groups'
@@ -148,6 +153,47 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
   useEffect(() => {
     localStorage.setItem('cand_study_groups_v2', JSON.stringify(groups));
   }, [groups]);
+
+  // Update buddies progress and status from Supabase on mount
+  useEffect(() => {
+    const fetchLatestBuddiesInfo = async () => {
+      // Filter out mock IDs (UUIDs have 36 chars and contain hyphens)
+      const actualUserIds = buddies.filter(b => b.id.includes('-')).map(b => b.id);
+      if (actualUserIds.length === 0) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('user_progress')
+          .select('user_id, full_name, email, progress_state, is_active')
+          .in('user_id', actualUserIds);
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          setBuddies(prev => prev.map(buddy => {
+            const match = data.find(row => row.user_id === buddy.id);
+            if (match) {
+              const name = match.full_name || match.email || buddy.name;
+              const completion = calculateWeightedProgress(match.progress_state, subjectGroups);
+              const status = match.is_active ? 'Online' : 'Offline';
+              return {
+                ...buddy,
+                name,
+                completionPercentage: completion,
+                status
+              };
+            }
+            return buddy;
+          }));
+        }
+      } catch (err) {
+        console.warn('Failed to update buddies from Supabase:', err);
+      }
+    };
+
+    fetchLatestBuddiesInfo();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Get members ranked by completion percentage
   const rankedMembers = useMemo(() => {
@@ -206,7 +252,7 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
   };
 
   // Add Buddy
-  const handleAddBuddy = (e: React.FormEvent) => {
+  const handleAddBuddy = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanCode = buddyCodeInput.trim().toUpperCase();
 
@@ -222,31 +268,80 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
       return;
     }
 
-    // Resolve name deterministically based on code
-    const namePart = cleanCode.replace('CA-', '').substring(0, 4);
-    const nameMapping: Record<string, string> = {
-      'KARA': 'Karan Mehta',
-      'DIVY': 'Divya Nair',
-      'AMIT': 'Amit Shah',
-      'PRER': 'Prerna Sen',
-      'VIKR': 'Vikram Rao',
-      'SIDD': 'Siddharth Jain'
-    };
-    const resolvedName = nameMapping[namePart] || (namePart.length > 0 
-      ? `${namePart.charAt(0) + namePart.substring(1).toLowerCase()} Sharma` 
-      : 'Study Buddy');
+    // Resolve name deterministically or query Supabase
+    const withoutPrefix = cleanCode.replace('CA-', '');
+    const base = withoutPrefix.substring(0, 4);
+    const suffix = withoutPrefix.substring(4);
+
+    let resolvedName = '';
+    let resolvedId = '';
+    let resolvedProgress = 0;
+    let resolvedStatus: 'Online' | 'Offline' | 'Studying' = 'Online';
+    let isActualUser = false;
+
+    showToastMsg('Searching for buddy on server...');
+
+    try {
+      if (base.length >= 3) {
+        // Query database
+        const { data, error } = await supabase
+          .from('user_progress')
+          .select('user_id, full_name, email, progress_state, is_active')
+          .or(`full_name.ilike.${base}%,email.ilike.${base}%`);
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          const suffixLower = suffix.toLowerCase();
+          const match = data.find(row => {
+            const rowUserId = row.user_id || '';
+            return rowUserId.toLowerCase().endsWith(suffixLower);
+          });
+
+          if (match) {
+            resolvedId = match.user_id;
+            resolvedName = match.full_name || match.email || 'Study Buddy';
+            resolvedProgress = calculateWeightedProgress(match.progress_state, subjectGroups);
+            resolvedStatus = match.is_active ? 'Online' : 'Offline';
+            isActualUser = true;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to find user in Supabase, falling back to mock:', err);
+    }
+
+    if (!isActualUser) {
+      const nameMapping: Record<string, string> = {
+        'KARA': 'Karan Mehta',
+        'DIVY': 'Divya Nair',
+        'AMIT': 'Amit Shah',
+        'PRER': 'Prerna Sen',
+        'VIKR': 'Vikram Rao',
+        'SIDD': 'Siddharth Jain'
+      };
+      resolvedName = nameMapping[base] || (base.length > 0 
+        ? `${base.charAt(0) + base.substring(1).toLowerCase()} Sharma` 
+        : 'Study Buddy');
+      resolvedId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 9);
+      resolvedProgress = Math.floor(Math.random() * 71) + 25;
+      resolvedStatus = Math.random() > 0.4 ? 'Studying' : 'Online';
+      
+      showToastMsg(`Buddy code not found on server. Added mock buddy: ${resolvedName}! 🤝`);
+    } else {
+      showToastMsg(`Added actual buddy: ${resolvedName}! 🤝`);
+    }
 
     const newBuddy: Buddy = {
-      id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 9),
+      id: resolvedId,
       name: resolvedName,
       code: cleanCode,
-      status: Math.random() > 0.4 ? 'Studying' : 'Online',
-      completionPercentage: Math.floor(Math.random() * 71) + 25
+      status: resolvedStatus,
+      completionPercentage: resolvedProgress
     };
 
     setBuddies(prev => [newBuddy, ...prev]);
     setBuddyCodeInput('');
-    showToastMsg(`Added buddy: ${resolvedName}! 🤝`);
   };
 
   // Remove Buddy
@@ -326,31 +421,68 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
   };
 
   // Add Member to Group
-  const handleAddMemberToGroup = (e: React.FormEvent) => {
+  const handleAddMemberToGroup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAddMemberOpen) return;
 
     let memberName = '';
+    let isActualUser = false;
+
     if (selectedBuddyToAdd) {
       memberName = selectedBuddyToAdd;
     } else if (manualMemberCode.trim()) {
       const code = manualMemberCode.trim().toUpperCase();
-      // Look up in buddies
+      // Look up in buddies first
       const foundBuddy = buddies.find(b => b.code === code);
       if (foundBuddy) {
         memberName = foundBuddy.name;
+        isActualUser = true;
       } else {
-        // Generate name dynamically from code or fallback
-        const namePart = code.replace('CA-', '').substring(0, 4);
-        const generatedNames: Record<string, string> = {
-          'KARA': 'Karan Mehta',
-          'DIVY': 'Divya Nair',
-          'AMIT': 'Amit Shah',
-          'PRER': 'Prerna Sen',
-          'VIKR': 'Vikram Rao',
-          'SIDD': 'Siddharth Jain'
-        };
-        memberName = generatedNames[namePart] || `${namePart.charAt(0) + namePart.substring(1).toLowerCase()} Sharma`;
+        // Query Supabase for this member
+        const withoutPrefix = code.replace('CA-', '');
+        const base = withoutPrefix.substring(0, 4);
+        const suffix = withoutPrefix.substring(4);
+        
+        try {
+          if (base.length >= 3) {
+            const { data, error } = await supabase
+              .from('user_progress')
+              .select('user_id, full_name, email')
+              .or(`full_name.ilike.${base}%,email.ilike.${base}%`);
+
+            if (error) throw error;
+
+            if (data && data.length > 0) {
+              const suffixLower = suffix.toLowerCase();
+              const match = data.find(row => {
+                const rowUserId = row.user_id || '';
+                return rowUserId.toLowerCase().endsWith(suffixLower);
+              });
+
+              if (match) {
+                memberName = match.full_name || match.email || 'Study Buddy';
+                isActualUser = true;
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to find member in Supabase:', err);
+        }
+
+        if (!isActualUser) {
+          // Fallback to deterministic name
+          const nameMapping: Record<string, string> = {
+            'KARA': 'Karan Mehta',
+            'DIVY': 'Divya Nair',
+            'AMIT': 'Amit Shah',
+            'PRER': 'Prerna Sen',
+            'VIKR': 'Vikram Rao',
+            'SIDD': 'Siddharth Jain'
+          };
+          memberName = nameMapping[base] || (base.length > 0
+            ? `${base.charAt(0) + base.substring(1).toLowerCase()} Sharma`
+            : 'Study Buddy');
+        }
       }
     }
 
