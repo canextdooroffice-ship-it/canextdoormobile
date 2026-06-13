@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, Wrench, Link as LinkIcon, Sparkles, Clock, Users } from 'lucide-react';
+import { ArrowLeft, Link as LinkIcon, Sparkles, Clock, Users } from 'lucide-react';
 
 interface ToolsProps {
   onBack: () => void;

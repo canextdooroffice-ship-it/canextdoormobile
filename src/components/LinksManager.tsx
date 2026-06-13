@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, Plus, Search, ExternalLink, Edit2, Trash2, Check, X, Link as LinkIcon, BookOpen, Clock, Tag } from 'lucide-react';
+import { ArrowLeft, Plus, Search, ExternalLink, Edit2, Trash2, Check, X, Link as LinkIcon, Tag } from 'lucide-react';
 
 interface LinkItem {
   id: string;

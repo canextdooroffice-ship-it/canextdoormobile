@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ArrowLeft, Clock, Search, BookOpen, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Search, BookOpen } from 'lucide-react';
 import { SYLLABUS_DATA } from '../constants/syllabus';
 import type { ProgressState } from './Subjects';
 import type { StudyLog } from './Planner';

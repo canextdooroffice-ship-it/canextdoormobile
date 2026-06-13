@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, Users, UserPlus, Copy, Flame, User, Check, Send, X, Plus, LogIn, Clock, ShieldAlert, Sparkles, Play } from 'lucide-react';
+import { ArrowLeft, Users, UserPlus, Copy, User, Check, X, Plus, LogIn } from 'lucide-react';
 
 interface Buddy {
   id: string;
@@ -225,7 +225,6 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
     // Generate mock name based on code
     const generatedNames = ['Karan Mehta', 'Divya Nair', 'Amit Shah', 'Prerna Sen', 'Vikram Rao', 'Siddharth Jain'];
     const randomName = generatedNames[Math.floor(Math.random() * generatedNames.length)];
-    const mockActivities = ['Financial Reporting', 'Advanced AFM', 'Direct Tax revision', 'Law lectures'];
 
     const newBuddy: Buddy = {
       id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 9),
@@ -246,10 +245,6 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
     showToastMsg(`Removed buddy: ${name}`);
   };
 
-  // Poke Buddy
-  const handlePokeBuddy = (name: string) => {
-    showToastMsg(`⚡ Poked ${name}! Notification sent.`);
-  };
 
   // Create Group
   const handleCreateGroup = (e: React.FormEvent) => {
