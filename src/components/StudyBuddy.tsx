@@ -195,6 +195,40 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Listen to realtime updates on user_progress table
+  useEffect(() => {
+    const channel = supabase
+      .channel('buddies_user_progress_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'user_progress' },
+        (payload) => {
+          const newRow = payload.new as any;
+          if (newRow && newRow.user_id) {
+            setBuddies(prev => prev.map(buddy => {
+              if (buddy.id === newRow.user_id) {
+                const name = newRow.full_name || newRow.email || buddy.name;
+                const completion = calculateWeightedProgress(newRow.progress_state, subjectGroups);
+                const status = newRow.is_active ? 'Online' : 'Offline';
+                return {
+                  ...buddy,
+                  name,
+                  completionPercentage: completion,
+                  status
+                };
+              }
+              return buddy;
+            }));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [subjectGroups]);
+
   // Get members ranked by completion percentage
   const rankedMembers = useMemo(() => {
     if (!activeStudyRoom) return [];
