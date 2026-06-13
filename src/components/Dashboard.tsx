@@ -1,6 +1,6 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Flame, Calendar, Target, Timer, Check, Trash2, X, Clock, Plus, Sun, Moon } from 'lucide-react';
+import { Flame, Calendar, Target, Timer, Check, Trash2, X, Clock, Plus, Sun, Moon, Wrench } from 'lucide-react';
 import { SYLLABUS_DATA } from '../constants/syllabus';
 import type { ProgressState } from './Subjects';
 import { CustomSelect } from './CustomSelect';
@@ -38,6 +38,7 @@ interface DashboardProps {
   onToggleDarkMode: () => void;
   preparingFor?: 'Group 1' | 'Group 2' | 'Both Groups';
   subjectGroups?: Record<string, 'Group 1' | 'Group 2'>;
+  onOpenTools: () => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -60,6 +61,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onToggleDarkMode,
   preparingFor = 'Both Groups',
   subjectGroups = {},
+  onOpenTools,
 }) => {
   // Extract user alias from real name or email fallback
   const userAlias = userFullName || (userEmail ? userEmail.split('@')[0] : 'Student');
@@ -660,6 +662,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <span>Open Timetable</span>
         </button>
       </div>
+
+      {/* Tools Button */}
+      <button 
+        type="button" 
+        className="dashboard-tools-btn"
+        onClick={onOpenTools}
+      >
+        <Wrench size={16} />
+        <span>Tools</span>
+      </button>
 
       {/* Weekly Timetable Modal */}
       {isTimetableModalOpen && createPortal(

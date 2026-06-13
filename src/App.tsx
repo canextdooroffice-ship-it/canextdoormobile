@@ -12,6 +12,10 @@ import { Analytics } from './components/Analytics';
 import { Profile } from './components/Profile';
 import { Subjects } from './components/Subjects';
 import { Test } from './components/Test';
+import { Tools } from './components/Tools';
+import { LinksManager } from './components/LinksManager';
+import { TimeManager } from './components/TimeManager';
+import { StudyBuddy } from './components/StudyBuddy';
 import type { TestRecord } from './components/Test';
 import { AdminPanel } from './components/AdminPanel';
 import type { MockTestPaper } from './constants/mockTests';
@@ -1708,6 +1712,36 @@ function App() {
                 onToggleDarkMode={() => setDarkMode(prev => !prev)}
                 preparingFor={preparingFor}
                 subjectGroups={subjectGroups}
+                onOpenTools={() => setActiveTab('tools')}
+              />
+            )}
+            {activeTab === 'tools' && (
+              <Tools
+                onBack={() => setActiveTab('home')}
+                onOpenTool={(toolId) => setActiveTab(toolId)}
+              />
+            )}
+            {activeTab === 'links-manager' && (
+              <LinksManager
+                onBack={() => setActiveTab('tools')}
+              />
+            )}
+            {activeTab === 'time-manager' && (
+              <TimeManager
+                caLevel={caLevel}
+                progressState={progressState}
+                studyLogs={studyLogs}
+                onBack={() => setActiveTab('tools')}
+              />
+            )}
+            {activeTab === 'study-buddy' && (
+              <StudyBuddy
+                userId={session?.user?.id || 'guest'}
+                userFullName={fullName}
+                userEmail={session?.user?.email || ''}
+                progressState={progressState}
+                subjectGroups={subjectGroups}
+                onBack={() => setActiveTab('tools')}
               />
             )}
             {activeTab === 'subjects' && (

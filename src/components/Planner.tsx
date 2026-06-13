@@ -659,8 +659,8 @@ export const Planner: React.FC<PlannerProps> = ({
   const todayFocusHours = focusHoursForSelectedDate;
 
   // Update the study label whenever subject/chapter selection changes
-  const updateStudyLabel = (subject: string, chapter: string) => {
-    const label = subject ? (chapter ? `${subject} • ${chapter}` : subject) : '';
+  const updateStudyLabel = (subject: string, chapter: string, phase: string) => {
+    const label = subject ? `${subject} - ${chapter || 'General'} (${phase})` : '';
     setTimerStudyLabel(label);
   };
 
@@ -1038,7 +1038,7 @@ export const Planner: React.FC<PlannerProps> = ({
             <div className="timer-bottom-controls">
               <button 
                 type="button" 
-                onClick={() => { updateStudyLabel(selectedSubject, selectedChapter); onTimerToggle(); }} 
+                onClick={() => { updateStudyLabel(selectedSubject, selectedChapter, selectedPhase); onTimerToggle(); }} 
                 className={`timer-start-btn ${timerRunning ? 'running' : ''}`}
               >
                 {timerRunning ? <Pause size={16} /> : <Play size={16} fill="currentColor" />}
@@ -1321,7 +1321,7 @@ export const Planner: React.FC<PlannerProps> = ({
                 <div className="timer-bottom-controls fullscreen">
                   <button 
                     type="button" 
-                    onClick={() => { updateStudyLabel(selectedSubject, selectedChapter); onTimerToggle(); }} 
+                    onClick={() => { updateStudyLabel(selectedSubject, selectedChapter, selectedPhase); onTimerToggle(); }} 
                     className={`timer-start-btn fullscreen ${timerRunning ? 'running' : ''}`}
                   >
                     {timerRunning ? <Pause size={20} /> : <Play size={20} fill="currentColor" />}
