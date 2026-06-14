@@ -200,6 +200,7 @@ function App() {
     loadFromStorage<ProgressState>(LS_KEYS.PROGRESS, buildInitialProgress())
   );
   const [tests, setTests] = useState<TestRecord[]>(() => loadFromStorage<TestRecord[]>('cand_tests', []));
+  const [favouriteQuestions, setFavouriteQuestions] = useState<any[]>(() => loadFromStorage<any[]>('cand_favourite_questions', []));
   const [dynamicPapers, setDynamicPapers] = useState<MockTestPaper[]>([]);
   const isAdmin = useMemo(() => {
     if (!session?.user) return false;
@@ -275,7 +276,11 @@ function App() {
       }
 
       if (data) {
-        setGlobalSubjects(data);
+        const deletedDefaultsRecord = data.find((sub: any) => sub.name === '__deleted_defaults__');
+        const deletedDefaultNames = new Set<string>(deletedDefaultsRecord?.chapters || []);
+        const actualSubjects = data.filter((sub: any) => sub.name !== '__deleted_defaults__');
+
+        setGlobalSubjects(actualSubjects);
         
         const STATIC_SUBJECT_KEYS = new Set([
           'Paper 1: Financial Reporting',
@@ -293,18 +298,20 @@ function App() {
           'Business Economics'
         ]);
 
-        // Prune any dynamic subjects that are no longer in Supabase
+        // Prune any dynamic subjects that are no longer in Supabase or deleted default subjects
         Object.keys(SYLLABUS_DATA).forEach((levelStr) => {
           const lvl = levelStr as keyof typeof SYLLABUS_DATA;
           Object.keys(SYLLABUS_DATA[lvl]).forEach((subName) => {
-            if (!STATIC_SUBJECT_KEYS.has(subName)) {
+            if (deletedDefaultNames.has(subName)) {
+              delete (SYLLABUS_DATA[lvl] as any)[subName];
+            } else if (!STATIC_SUBJECT_KEYS.has(subName)) {
               delete (SYLLABUS_DATA[lvl] as any)[subName];
             }
           });
         });
         
         // Dynamically merge/overwrite into SYLLABUS_DATA constant
-        data.forEach((sub: any) => {
+        actualSubjects.forEach((sub: any) => {
           const lvl = sub.level as keyof typeof SYLLABUS_DATA;
           if (SYLLABUS_DATA[lvl]) {
             (SYLLABUS_DATA[lvl] as any)[sub.name] = sub.chapters || [];
@@ -925,6 +932,9 @@ function App() {
   useEffect(() => {
     saveToStorage('cand_tests', tests);
   }, [tests]);
+  useEffect(() => {
+    saveToStorage('cand_favourite_questions', favouriteQuestions);
+  }, [favouriteQuestions]);
 
 
 
@@ -933,10 +943,10 @@ function App() {
   const hasSyncedRef = useRef(false); // prevent double-load on mount
 
   // Ref to always hold the latest state values for loadCloudData callbacks without stale closure issues
-  const stateRef = useRef({ progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests });
+  const stateRef = useRef({ progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, favouriteQuestions });
   useEffect(() => {
-    stateRef.current = { progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests };
-  }, [progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests]);
+    stateRef.current = { progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, favouriteQuestions };
+  }, [progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, favouriteQuestions]);
 
   // Load cloud data on login (restores progress on new device)
   const loadCloudData = useCallback(async (userId: string, email: string) => {
@@ -991,6 +1001,7 @@ function App() {
             subjectGroups?: Record<string, 'Group 1' | 'Group 2'>;
             preparingFor?: 'Group 1' | 'Group 2' | 'Both Groups';
             tests?: TestRecord[];
+            favouriteQuestions?: any[];
             streakMigrated?: boolean;
           };
           setProgressState(packed.checklist || {});
@@ -999,6 +1010,7 @@ function App() {
           setMistakes(packed.mistakes || []);
           setSlots(packed.slots || []);
           setTests(packed.tests || []);
+          setFavouriteQuestions(packed.favouriteQuestions || []);
           if (packed.fullName) setFullName(packed.fullName);
           if (packed.examStartDate) setExamStartDate(packed.examStartDate);
           // Load checkInHistory from cloud if present
@@ -1169,6 +1181,7 @@ function App() {
         subjectGroups,
         preparingFor,
         tests,
+        favouriteQuestions,
         streakMigrated: true
       };
 
@@ -1185,7 +1198,7 @@ function App() {
     return () => {
       if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     };
-  }, [progressState, caLevel, studyTarget, totalHours, fullName, examStartDate, tasks, revisions, mistakes, slots, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, session]);
+  }, [progressState, caLevel, studyTarget, totalHours, fullName, examStartDate, tasks, revisions, mistakes, slots, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, favouriteQuestions, session]);
 
   // Listen for service worker update events from main.tsx
   useEffect(() => {
@@ -1774,6 +1787,8 @@ function App() {
                 setTests={setTests}
                 onBack={() => setActiveTab('subjects')}
                 dynamicPapers={dynamicPapers}
+                favouriteQuestions={favouriteQuestions}
+                setFavouriteQuestions={setFavouriteQuestions}
               />
             )}
             {activeTab === 'planner' && (

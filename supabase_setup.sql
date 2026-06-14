@@ -160,3 +160,69 @@ CREATE POLICY "Allow admin write access to global subjects"
 -- Add global_subjects to Supabase realtime publication
 -- ALTER PUBLICATION supabase_realtime ADD TABLE global_subjects;
 
+
+-- ============================================
+-- Test-wise MCQ Leaderboard Function (First Attempt Only)
+-- ============================================
+
+CREATE OR REPLACE FUNCTION get_test_leaderboard(target_test_title TEXT)
+RETURNS TABLE (
+  user_id UUID,
+  user_name TEXT,
+  marks_obtained NUMERIC,
+  total_marks NUMERIC,
+  percentage NUMERIC,
+  attempt_date TEXT,
+  time_spent INT,
+  rank INT
+) SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  RETURN QUERY
+  WITH user_attempts AS (
+    SELECT 
+      up.user_id AS u_id,
+      COALESCE(NULLIF(up.full_name, ''), 'Anonymous Student') AS u_name,
+      (t.elem->>'marksObtained')::NUMERIC AS score,
+      (t.elem->>'totalMarks')::NUMERIC AS max_score,
+      t.elem->>'date' AS att_date,
+      (t.elem->>'timeTaken')::INT AS time_spent,
+      ROW_NUMBER() OVER (
+        PARTITION BY up.user_id 
+        ORDER BY t.idx DESC
+      ) AS attempt_seq
+    FROM user_progress up
+    CROSS JOIN LATERAL jsonb_array_elements(
+      CASE 
+        WHEN jsonb_typeof(up.progress_state->'tests') = 'array' THEN up.progress_state->'tests'
+        ELSE '[]'::jsonb
+      END
+    ) WITH ORDINALITY AS t(elem, idx)
+    WHERE up.is_active = true 
+      AND t.elem->>'testName' = target_test_title
+      AND t.elem->>'notes' LIKE 'MCQ Score:%' 
+      AND t.elem->>'notes' NOT LIKE '%disqualified%'
+      AND (t.elem->>'totalMarks')::NUMERIC > 0
+  )
+  SELECT 
+    ua.u_id AS user_id,
+    ua.u_name AS user_name,
+    ua.score AS marks_obtained,
+    ua.max_score AS total_marks,
+    ROUND(((ua.score / ua.max_score) * 100)::numeric, 2) AS percentage,
+    ua.att_date AS attempt_date,
+    ua.time_spent AS time_spent,
+    DENSE_RANK() OVER (
+      ORDER BY 
+        (ua.score / ua.max_score) DESC, 
+        COALESCE(ua.time_spent, 999999) ASC, 
+        ua.att_date ASC
+    )::INT AS rank
+  FROM user_attempts ua
+  WHERE ua.attempt_seq = 1
+  ORDER BY rank ASC, ua.u_name ASC;
+END;
+$$ LANGUAGE plpgsql;
+
+

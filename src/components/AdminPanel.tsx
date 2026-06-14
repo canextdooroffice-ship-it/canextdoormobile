@@ -122,12 +122,47 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     return Object.keys(SYLLABUS_DATA[level] || {});
   }, [level, globalSubjects]);
 
+  // Default global subjects from syllabus
+  const defaultSubjects = useMemo(() => {
+    const staticKeys = new Set([
+      'Paper 1: Financial Reporting',
+      'Paper 2: Advanced Financial Management',
+      'Paper 3: Advanced Auditing and Assurance',
+      'Paper 4: Direct Tax and International Taxation',
+      'Paper 5: Indirect Taxation and Customs',
+      'Advanced Accounting',
+      'Corporate & Other Laws',
+      'Taxation (DT & IDT)',
+      'Cost & Management Accounting',
+      'Principles & Practice of Accounting',
+      'Business Laws',
+      'Quantitative Aptitude',
+      'Business Economics'
+    ]);
+    const list: any[] = [];
+    Object.entries(SYLLABUS_DATA).forEach(([levelKey, syllabusObj]) => {
+      Object.entries(syllabusObj).forEach(([subjectName, chapters]) => {
+        if (staticKeys.has(subjectName)) {
+          list.push({
+            name: subjectName,
+            level: levelKey,
+            chapters: chapters as string[],
+            isDefault: true
+          });
+        }
+      });
+    });
+    return list;
+  }, [globalSubjects]);
+
   const [subject, setSubject] = useState(subjects[0] || '');
 
   // Keep subject updated when level changes
   React.useEffect(() => {
-    setSubject(subjects[0] || '');
-  }, [subjects]);
+    if (subjects.length > 0 && !subjects.includes(subject)) {
+      setSubject(subjects[0] || '');
+    }
+  }, [subjects, subject]);
 
   const [title, setTitle] = useState('');
   const [type, setType] = useState<'MCQ' | 'Subjective'>('MCQ');
@@ -151,6 +186,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Built questions list
   const [builtQuestions, setBuiltQuestions] = useState<any[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [editingPaper, setEditingPaper] = useState<any | null>(null);
 
   // Add question to paper
   const handleAddQuestion = (e: React.FormEvent) => {
@@ -220,23 +256,46 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setUploading(true);
 
     try {
-      const { error } = await supabase.from('mock_papers').insert({
-        level,
-        subject,
-        title: title.trim(),
-        type,
-        total_marks: totalMarks,
-        questions: builtQuestions,
-      });
+      let error;
+      if (editingPaper) {
+        const { error: err } = await supabase
+          .from('mock_papers')
+          .update({
+            level,
+            subject,
+            title: title.trim(),
+            type,
+            total_marks: totalMarks,
+            questions: builtQuestions,
+          })
+          .eq('id', editingPaper.id);
+        error = err;
+      } else {
+        const { error: err } = await supabase.from('mock_papers').insert({
+          level,
+          subject,
+          title: title.trim(),
+          type,
+          total_marks: totalMarks,
+          questions: builtQuestions,
+        });
+        error = err;
+      }
 
       if (error) throw error;
 
-      showToast('Test Paper uploaded successfully and broadcasted in real-time!', 'success');
+      showToast(
+        editingPaper
+          ? 'Test Paper updated successfully and broadcasted in real-time!'
+          : 'Test Paper uploaded successfully and broadcasted in real-time!',
+        'success'
+      );
       setTitle('');
       setBuiltQuestions([]);
+      setEditingPaper(null);
       await onRefresh();
     } catch (err: any) {
-      showToast(`Upload failed: ${err.message}`, 'error');
+      showToast(`${editingPaper ? 'Update' : 'Upload'} failed: ${err.message}`, 'error');
     } finally {
       setUploading(false);
     }
@@ -271,20 +330,72 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         .filter((c) => c.length > 0);
 
       if (editingSubject) {
-        // Update existing subject
-        const { error } = await supabase
-          .from('global_subjects')
-          .update({
+        if (editingSubject.isDefault) {
+          // Editing a default subject:
+          // 1. Add the old default subject name to __deleted_defaults__ to hide it
+          const { data, error: fetchErr } = await supabase
+            .from('global_subjects')
+            .select('*')
+            .eq('name', '__deleted_defaults__')
+            .single();
+
+          let currentDeleted: string[] = [];
+          let recordId: string | null = null;
+
+          if (fetchErr && fetchErr.code !== 'PGRST116') throw fetchErr;
+
+          if (data) {
+            currentDeleted = Array.isArray(data.chapters) ? data.chapters : [];
+            recordId = data.id;
+          }
+
+          if (!currentDeleted.includes(editingSubject.name)) {
+            currentDeleted.push(editingSubject.name);
+          }
+
+          if (recordId) {
+            const { error: updateErr } = await supabase
+              .from('global_subjects')
+              .update({ chapters: currentDeleted })
+              .eq('id', recordId);
+            if (updateErr) throw updateErr;
+          } else {
+            const { error: insertErr } = await supabase
+              .from('global_subjects')
+              .insert({
+                level: 'System',
+                name: '__deleted_defaults__',
+                chapters: currentDeleted
+              });
+            if (insertErr) throw insertErr;
+          }
+
+          // 2. Insert the modified subject as a new custom subject
+          const { error: insertErr } = await supabase.from('global_subjects').insert({
             level: newSubLevel,
             name: newSubName.trim(),
             chapters: parsedChapters,
-          })
-          .eq('id', editingSubject.id);
+          });
+          if (insertErr) throw insertErr;
 
-        if (error) throw error;
+          showToast('Default global subject updated successfully and broadcasted in real-time!', 'success');
+          setEditingSubject(null);
+        } else {
+          // Update existing custom subject
+          const { error } = await supabase
+            .from('global_subjects')
+            .update({
+              level: newSubLevel,
+              name: newSubName.trim(),
+              chapters: parsedChapters,
+            })
+            .eq('id', editingSubject.id);
 
-        showToast('Global subject updated successfully and broadcasted in real-time!', 'success');
-        setEditingSubject(null);
+          if (error) throw error;
+
+          showToast('Global subject updated successfully and broadcasted in real-time!', 'success');
+          setEditingSubject(null);
+        }
       } else {
         // Insert new subject
         const { error } = await supabase.from('global_subjects').insert({
@@ -308,14 +419,54 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
-  const handleDeleteSubject = async (id: string, name: string) => {
+  const handleDeleteSubject = async (id: string | undefined, name: string, isDefault?: boolean) => {
     if (!window.confirm(`Are you sure you want to delete the subject "${name}"? All students will lose access to it.`)) {
       return;
     }
 
     try {
-      const { error } = await supabase.from('global_subjects').delete().eq('id', id);
-      if (error) throw error;
+      if (isDefault) {
+        // Handle deleting a default subject by adding to __deleted_defaults__
+        const { data, error: fetchErr } = await supabase
+          .from('global_subjects')
+          .select('*')
+          .eq('name', '__deleted_defaults__')
+          .single();
+
+        let currentDeleted: string[] = [];
+        let recordId: string | null = null;
+
+        if (fetchErr && fetchErr.code !== 'PGRST116') throw fetchErr;
+
+        if (data) {
+          currentDeleted = Array.isArray(data.chapters) ? data.chapters : [];
+          recordId = data.id;
+        }
+
+        if (!currentDeleted.includes(name)) {
+          currentDeleted.push(name);
+        }
+
+        if (recordId) {
+          const { error: updateErr } = await supabase
+            .from('global_subjects')
+            .update({ chapters: currentDeleted })
+            .eq('id', recordId);
+          if (updateErr) throw updateErr;
+        } else {
+          const { error: insertErr } = await supabase
+            .from('global_subjects')
+            .insert({
+              level: 'System',
+              name: '__deleted_defaults__',
+              chapters: currentDeleted
+            });
+          if (insertErr) throw insertErr;
+        }
+      } else {
+        const { error } = await supabase.from('global_subjects').delete().eq('id', id);
+        if (error) throw error;
+      }
 
       showToast(`Subject "${name}" deleted successfully`, 'success');
       await onRefreshGlobalSubjects();
@@ -644,6 +795,65 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
             </div>
           )}
+
+          {/* List of Default Global Subjects */}
+          <div className="mt-4" style={{ marginTop: '20px' }}>
+            <h4 className="font-bold text-xs text-slate-500 uppercase tracking-wider mb-2" style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-secondary)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Default Global Subjects ({defaultSubjects.length})
+            </h4>
+            <div className="subject-collapsible-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {defaultSubjects.map((sub: any, idx: number) => (
+                <div key={`default-sub-${idx}`} className="paper-row-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderRadius: '12px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', opacity: 0.85 }}>
+                  <div className="paper-row-left" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <h4 className="paper-row-title" style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)', margin: 0 }}>
+                      {sub.name}
+                    </h4>
+                    <div className="paper-row-badge-row" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span className="paper-type-badge mcq" style={{ backgroundColor: 'rgba(99, 102, 241, 0.1)', color: 'var(--accent-primary)', border: 'none', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold' }}>
+                        {sub.level}
+                      </span>
+                      <span className="paper-type-badge subjective" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--accent-green)', border: 'none', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold' }}>
+                        DEFAULT
+                      </span>
+                      <span className="paper-meta-text" style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                        {sub.chapters?.length || 0} Chapters
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingSubject(sub);
+                        setNewSubLevel(sub.level);
+                        setNewSubName(sub.name);
+                        setNewSubChapters(sub.chapters ? sub.chapters.join(', ') : '');
+                        // Scroll to header smoothly
+                        const formElem = document.querySelector('.admin-panel-container');
+                        if (formElem) {
+                          formElem.scrollIntoView({ behavior: 'smooth' });
+                        }
+                      }}
+                      className="subject-delete-btn"
+                      title="Edit Subject"
+                      style={{ color: 'var(--accent-secondary)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
+                    >
+                      <Edit size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteSubject(undefined, sub.name, true)}
+                      className="subject-delete-btn"
+                      title="Delete Subject"
+                      style={{ color: 'var(--accent-red)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
@@ -654,9 +864,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           <div className="profile-section-card">
             <div className="profile-section-header purple">
               <div className="section-icon-badge purple">
-                <Plus size={18} />
+                {editingPaper ? <Edit size={18} /> : <Plus size={18} />}
               </div>
-              <h3 className="section-header-title">Draft New Test Paper</h3>
+              <h3 className="section-header-title">
+                {editingPaper ? `Edit Test Paper: ${editingPaper.title}` : 'Draft New Test Paper'}
+              </h3>
             </div>
 
             <div className="admin-upload-form mt-3">
@@ -940,22 +1152,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               )}
 
               {/* Action Upload button */}
-              <button
-                type="button"
-                onClick={handleUploadPaper}
-                disabled={uploading || builtQuestions.length === 0}
-                className="action-button-primary mt-4 w-full"
-                style={{ padding: '12px' }}
-              >
-                {uploading ? (
-                  <span className="spinner"></span>
-                ) : (
-                  <>
-                    <Award size={16} />
-                    <span>Publish Test Paper (Broadcast Sync)</span>
-                  </>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+                {editingPaper && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingPaper(null);
+                      setTitle('');
+                      setBuiltQuestions([]);
+                    }}
+                    className="action-button-secondary"
+                    style={{ flex: 1, padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    Cancel Edit
+                  </button>
                 )}
-              </button>
+                <button
+                  type="button"
+                  onClick={handleUploadPaper}
+                  disabled={uploading || builtQuestions.length === 0}
+                  className="action-button-primary"
+                  style={{ flex: editingPaper ? 2 : 1, padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', width: editingPaper ? 'auto' : '100%' }}
+                >
+                  {uploading ? (
+                    <span className="spinner"></span>
+                  ) : (
+                    <>
+                      <Award size={16} />
+                      <span>{editingPaper ? 'Update Test Paper' : 'Publish Test Paper'} (Broadcast Sync)</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -996,14 +1224,39 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         </span>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleDeletePaper(paper.id)}
-                      className="subject-delete-btn"
-                      title="Delete Paper"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingPaper(paper);
+                          setLevel(paper.level);
+                          setSubject(paper.subject);
+                          setTitle(paper.title);
+                          setType(paper.type);
+                          setTotalMarks(paper.totalMarks || 100);
+                          setBuiltQuestions(paper.questions || []);
+                          // Scroll to header smoothly
+                          const formElem = document.querySelector('.admin-panel-container');
+                          if (formElem) {
+                            formElem.scrollIntoView({ behavior: 'smooth' });
+                          }
+                        }}
+                        className="subject-delete-btn"
+                        title="Edit Paper"
+                        style={{ color: 'var(--accent-secondary)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
+                      >
+                        <Edit size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeletePaper(paper.id)}
+                        className="subject-delete-btn"
+                        title="Delete Paper"
+                        style={{ color: 'var(--accent-red)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </div>
                 ))
               )}

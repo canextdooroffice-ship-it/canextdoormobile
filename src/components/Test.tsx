@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ChevronLeft, ChevronDown, Plus, Trash2, Calendar, Award, BookOpen, Info, ClipboardList, Check, X, ArrowRight, ArrowLeft, CheckCircle, HelpCircle } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Trophy, Users, RefreshCw, ChevronLeft, ChevronDown, Plus, Trash2, Calendar, Award, BookOpen, Info, ClipboardList, Check, X, ArrowRight, ArrowLeft, CheckCircle, HelpCircle, Star } from 'lucide-react';
 import { SYLLABUS_DATA } from '../constants/syllabus';
 import { MOCK_TESTS_DATA } from '../constants/mockTests';
 import type { MockTestPaper, MCQQuestion, SubjectiveQuestion } from '../constants/mockTests';
 import type { ProgressState } from './Subjects';
+import { supabase } from '../supabaseClient';
+
 
 export interface TestRecord {
   id: string;
@@ -13,6 +16,7 @@ export interface TestRecord {
   marksObtained: number;
   totalMarks: number;
   notes?: string;
+  timeTaken?: number; // Time taken in seconds
 }
 
 interface TestProps {
@@ -24,6 +28,8 @@ interface TestProps {
   setTests: React.Dispatch<React.SetStateAction<TestRecord[]>>;
   onBack: () => void;
   dynamicPapers: MockTestPaper[];
+  favouriteQuestions: any[];
+  setFavouriteQuestions: React.Dispatch<React.SetStateAction<any[]>>;
 }
 
 export const Test: React.FC<TestProps> = ({
@@ -35,6 +41,8 @@ export const Test: React.FC<TestProps> = ({
   setTests,
   onBack,
   dynamicPapers,
+  favouriteQuestions,
+  setFavouriteQuestions,
 }) => {
   // Get active subjects dynamically based on syllabus data & progressState
   const activeSubjects = useMemo(() => {
@@ -80,6 +88,148 @@ export const Test: React.FC<TestProps> = ({
   const [showSuggestedAnswers, setShowSuggestedAnswers] = useState<Record<string, boolean>>({});
   const [subjectiveMarks, setSubjectiveMarks] = useState<Record<string, number | ''>>({});
   const [subjectiveNotes, setSubjectiveNotes] = useState('');
+  const [showUnmarkedDrawer, setShowUnmarkedDrawer] = useState<boolean>(false);
+
+  // Leaderboard States & Fetching Logic
+  interface LeaderboardEntry {
+    user_id: string;
+    user_name: string;
+    marks_obtained: number;
+    total_marks: number;
+    percentage: number;
+    attempt_date: string;
+    time_spent: number | null;
+    rank: number;
+  }
+
+  const [showLeaderboardModal, setShowLeaderboardModal] = useState<boolean>(false);
+  const [expandedFavSubjects, setExpandedFavSubjects] = useState<Record<string, boolean>>({});
+  const [selectedBookmarkedQuestion, setSelectedBookmarkedQuestion] = useState<any | null>(null);
+
+  const levelFavs = useMemo(() => {
+    return favouriteQuestions.filter((q) => q.caLevel === caLevel);
+  }, [favouriteQuestions, caLevel]);
+
+  const favsBySubject = useMemo(() => {
+    const groups: Record<string, typeof levelFavs> = {};
+    levelFavs.forEach((fav) => {
+      if (!groups[fav.subjectName]) {
+        groups[fav.subjectName] = [];
+      }
+      groups[fav.subjectName].push(fav);
+    });
+    return groups;
+  }, [levelFavs]);
+
+  const toggleFavSubjectExpand = (subName: string) => {
+    setExpandedFavSubjects((prev) => ({
+      ...prev,
+      [subName]: !prev[subName],
+    }));
+  };
+
+  const removeFavouriteQuestion = (id: string, paperId: string) => {
+    setFavouriteQuestions((prev) =>
+      prev.filter((q) => !(q.id === id && q.paperId === paperId))
+    );
+    showToast('Removed from Bookmarks', 'info');
+  };
+
+  const toggleFavouriteQuestion = (question: any, type: 'MCQ' | 'Subjective') => {
+    if (!activeTest) return;
+    
+    const isFav = favouriteQuestions.some(
+      (q) => q.id === question.id && q.paperId === activeTest.id
+    );
+
+    if (isFav) {
+      setFavouriteQuestions((prev) =>
+        prev.filter((q) => !(q.id === question.id && q.paperId === activeTest.id))
+      );
+      showToast('Removed from Bookmarks', 'info');
+    } else {
+      const favItem = {
+        id: question.id,
+        paperId: activeTest.id,
+        paperTitle: activeTest.title,
+        subjectName: activeTestSubject,
+        caLevel: caLevel,
+        questionText: question.question,
+        options: type === 'MCQ' ? question.options : undefined,
+        correctAnswerIndex: type === 'MCQ' ? question.correctAnswerIndex : undefined,
+        explanation: type === 'MCQ' ? question.explanation : undefined,
+        suggestedAnswer: type === 'Subjective' ? question.suggestedAnswer : undefined,
+        marks: type === 'Subjective' ? question.marks : undefined,
+        type: type,
+      };
+      setFavouriteQuestions((prev) => [...prev, favItem]);
+      showToast('Saved to Bookmarks', 'success');
+    }
+  };
+
+  const [selectedLeaderboardTest, setSelectedLeaderboardTest] = useState<MockTestPaper | null>(null);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState<boolean>(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
+
+  // Time tracking states for test attempts
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
+
+  // Interval effect to run elapsed timer during attempts
+  useEffect(() => {
+    let intervalId: number;
+    if (activeTest && !showQuizResults) {
+      intervalId = window.setInterval(() => {
+        setElapsedSeconds((prev) => prev + 1);
+      }, 1000);
+    }
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [activeTest, showQuizResults]);
+
+  // Fetch current user ID on mount
+  useEffect(() => {
+    const getUser = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          setCurrentUserId(user.id);
+        }
+      } catch (err) {
+        console.error('Error fetching user for leaderboard:', err);
+      }
+    };
+    getUser();
+  }, []);
+
+  const fetchLeaderboardData = async (testTitle: string) => {
+    setLoadingLeaderboard(true);
+    setLeaderboardError(null);
+    try {
+      const { data, error } = await supabase.rpc('get_test_leaderboard', {
+        target_test_title: testTitle,
+      });
+      if (error) {
+        throw error;
+      }
+      setLeaderboard(data || []);
+    } catch (err: any) {
+      console.error('Failed to fetch test leaderboard:', err);
+      setLeaderboardError(err.message || 'Failed to load leaderboard data from database.');
+    } finally {
+      setLoadingLeaderboard(false);
+    }
+  };
+
+  const handleOpenLeaderboard = (paper: MockTestPaper) => {
+    setSelectedLeaderboardTest(paper);
+    setShowLeaderboardModal(true);
+    fetchLeaderboardData(paper.title);
+  };
 
   // Stats calculation
   const stats = useMemo(() => {
@@ -183,6 +333,8 @@ export const Test: React.FC<TestProps> = ({
     setShowSuggestedAnswers({});
     setSubjectiveMarks({});
     setSubjectiveNotes('');
+    setShowUnmarkedDrawer(false);
+    setElapsedSeconds(0);
   };
 
   // Handle MCQ Choice
@@ -263,6 +415,7 @@ export const Test: React.FC<TestProps> = ({
       marksObtained: finalScore,
       totalMarks: activeTest.totalMarks,
       notes: notesStr,
+      timeTaken: elapsedSeconds,
     };
 
     setTests((prev) => [newRecord, ...prev]);
@@ -348,6 +501,13 @@ export const Test: React.FC<TestProps> = ({
     return correctCount;
   }, [activeTest, mcqAnswers, revealedQuestions]);
 
+  // Format seconds into MM:SS format
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
   // Check if a test has been attempted in log history
   const getTestLogStatus = (sub: string, title: string) => {
     return tests.find((t) => t.subjectName === sub && t.testName === title);
@@ -377,9 +537,14 @@ export const Test: React.FC<TestProps> = ({
             <ChevronLeft size={20} />
             <span>Quit Attempt</span>
           </button>
-          <span className="test-header-title-text truncate max-w-[200px]">
+          <span className="test-header-title-text truncate max-w-[150px]">
             {activeTest.title}
           </span>
+          {isMCQ && (
+            <div className="test-timer-badge ml-auto">
+              <span className="timer-text">{formatTime(elapsedSeconds)}</span>
+            </div>
+          )}
         </div>
 
         {/* Info card */}
@@ -396,149 +561,249 @@ export const Test: React.FC<TestProps> = ({
         {/* MCQ Interactive Workspace */}
         {isMCQ && (
           <div className="mcq-attempt-area mt-4">
-            {!showQuizResults ? (
-              <>
-                {/* Question Carousel Card */}
-                <div className="profile-section-card relative overflow-hidden">
-                  <div className="mcq-progress-bar-wrap">
-                    <div className="mcq-progress-bar-fill" style={{ width: `${progressPct}%` }} />
-                  </div>
-                  
-                  <div className="question-card-header-row pt-2">
-                    <span className="question-number-indicator">
-                      Question {currentQuestionIndex + 1} of {totalQuestions}
-                    </span>
-                    <span className="question-points-badge">
-                      {parseFloat((activeTest.totalMarks / totalQuestions).toFixed(1))} M
-                    </span>
-                  </div>
-
-                  <div className="question-body-text mt-3">
-                    {(activeTest.questions as MCQQuestion[])[currentQuestionIndex].question}
-                  </div>
-
-                  {/* Options List */}
-                  <div className="mcq-options-container mt-4">
-                    {(activeTest.questions as MCQQuestion[])[currentQuestionIndex].options.map((opt, oIdx) => {
-                      const currentQuestion = (activeTest.questions as MCQQuestion[])[currentQuestionIndex];
-                      const qId = currentQuestion.id;
-                      const isSelected = mcqAnswers[qId] === oIdx;
-                      const isRevealed = !!revealedQuestions[qId];
-                      const isCorrectOption = oIdx === currentQuestion.correctAnswerIndex;
-
-                      let optionClass = `mcq-option-button`;
-                      if (isSelected) optionClass += ' active';
-                      if (isRevealed) {
-                        if (isCorrectOption) optionClass += ' reveal-correct';
-                        else if (isSelected) optionClass += ' reveal-incorrect';
-                        optionClass += ' disabled';
-                      }
-
-                      return (
+            {!showQuizResults ? (() => {
+              const currentQuestion = (activeTest.questions as MCQQuestion[])[currentQuestionIndex];
+              const isBookmarked = favouriteQuestions.some(
+                (q) => q.id === currentQuestion.id && q.paperId === activeTest.id
+              );
+              return (
+                <>
+                  {/* Question Carousel Card */}
+                  <div className="profile-section-card relative overflow-hidden">
+                    <div className="mcq-progress-bar-wrap">
+                      <div className="mcq-progress-bar-fill" style={{ width: `${progressPct}%` }} />
+                    </div>
+                    
+                    <div className="question-card-header-row pt-2 flex justify-between items-center">
+                      <span className="question-number-indicator">
+                        Question {currentQuestionIndex + 1} of {totalQuestions}
+                      </span>
+                      <div className="flex items-center gap-2">
                         <button
-                          key={oIdx}
                           type="button"
-                          onClick={() => !isRevealed && handleSelectMCQOption(qId, oIdx)}
-                          className={optionClass}
-                          disabled={isRevealed}
+                          onClick={() => toggleFavouriteQuestion(currentQuestion, 'MCQ')}
+                          className="test-bookmark-btn"
+                          title={isBookmarked ? "Remove Bookmark" : "Bookmark Question"}
                         >
-                          <span className="option-letter">
-                            {String.fromCharCode(65 + oIdx)}
-                          </span>
-                          <span className="option-text">{opt}</span>
+                          <Star size={18} className={isBookmarked ? 'filled' : ''} />
                         </button>
-                      );
-                    })}
-                  </div>
+                        <span className="question-points-badge">
+                          {parseFloat((activeTest.totalMarks / totalQuestions).toFixed(1))} M
+                        </span>
+                      </div>
+                    </div>
 
-                  {/* Reveal Answer Action */}
-                  <div className="mcq-reveal-action-block">
-                    {(() => {
-                      const currentQuestion = (activeTest.questions as MCQQuestion[])[currentQuestionIndex];
-                      const qId = currentQuestion.id;
-                      const isRevealed = !!revealedQuestions[qId];
+                    <div className="question-body-text mt-3">
+                      {currentQuestion.question}
+                    </div>
 
-                      if (!isRevealed) {
+                    {/* Options List */}
+                    <div className="mcq-options-container mt-4">
+                      {currentQuestion.options.map((opt, oIdx) => {
+                        const qId = currentQuestion.id;
+                        const isSelected = mcqAnswers[qId] === oIdx;
+                        const isRevealed = !!revealedQuestions[qId];
+                        const isCorrectOption = oIdx === currentQuestion.correctAnswerIndex;
+
+                        let optionClass = `mcq-option-button`;
+                        if (isSelected) optionClass += ' active';
+                        if (isRevealed) {
+                          if (isCorrectOption) optionClass += ' reveal-correct';
+                          else if (isSelected) optionClass += ' reveal-incorrect';
+                          optionClass += ' disabled';
+                        }
+
                         return (
                           <button
+                            key={oIdx}
                             type="button"
-                            onClick={() => {
-                              if (window.confirm("Are you sure you want to reveal the answer? This question will be marked as 0 points.")) {
-                                setRevealedQuestions(prev => ({ ...prev, [qId]: true }));
-                              }
-                            }}
-                            className="attempt-delete-action-btn danger"
+                            onClick={() => !isRevealed && handleSelectMCQOption(qId, oIdx)}
+                            className={optionClass}
+                            disabled={isRevealed}
                           >
-                            <HelpCircle size={14} />
-                            <span>Reveal Answer (Disqualifies Marks)</span>
+                            <span className="option-letter">
+                              {String.fromCharCode(65 + oIdx)}
+                            </span>
+                            <span className="option-text">{opt}</span>
                           </button>
                         );
-                      }
+                      })}
+                    </div>
 
-                      return (
-                        <div className="w-full slide-up">
-                          <div className="explanation-badge incorrect revealed-badge">
-                            <X size={12} />
-                            <span>Answer Revealed (0 Marks Obtained)</span>
+                    {/* Reveal Answer Action */}
+                    <div className="mcq-reveal-action-block">
+                      {(() => {
+                        const qId = currentQuestion.id;
+                        const isRevealed = !!revealedQuestions[qId];
+
+                        if (!isRevealed) {
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm("Are you sure you want to reveal the answer? This question will be marked as 0 points.")) {
+                                  setRevealedQuestions(prev => ({ ...prev, [qId]: true }));
+                                }
+                              }}
+                              className="attempt-delete-action-btn danger"
+                            >
+                              <HelpCircle size={14} />
+                              <span>Reveal Answer (Disqualifies Marks)</span>
+                            </button>
+                          );
+                        }
+
+                        return (
+                          <div className="w-full slide-up">
+                            <div className="explanation-badge incorrect revealed-badge">
+                              <X size={12} />
+                              <span>Answer Revealed (0 Marks Obtained)</span>
+                            </div>
+                            <div className="explanation-reason-box">
+                              <HelpCircle size={14} className="explanation-reason-icon" />
+                              <p className="explanation-reason-text">{currentQuestion.explanation}</p>
+                            </div>
                           </div>
-                          <div className="explanation-reason-box">
-                            <HelpCircle size={14} className="explanation-reason-icon" />
-                            <p className="explanation-reason-text">{currentQuestion.explanation}</p>
-                          </div>
-                        </div>
-                      );
-                    })()}
+                        );
+                      })()}
+                    </div>
                   </div>
-                </div>
 
-                {/* Navigation Carousel controls */}
-                <div className="mcq-carousel-controls-row mt-4">
-                  <button
-                    type="button"
-                    disabled={currentQuestionIndex === 0}
-                    onClick={() => setCurrentQuestionIndex((prev) => prev - 1)}
-                    className="carousel-nav-btn"
-                  >
-                    <ArrowLeft size={16} />
-                    <span>Previous</span>
-                  </button>
-
-                  {currentQuestionIndex < totalQuestions - 1 ? (
+                  {/* Navigation Carousel controls */}
+                  <div className="mcq-carousel-controls-row mt-4">
                     <button
                       type="button"
-                      onClick={() => setCurrentQuestionIndex((prev) => prev + 1)}
-                      className="carousel-nav-btn next"
+                      disabled={currentQuestionIndex === 0}
+                      onClick={() => setCurrentQuestionIndex((prev) => prev - 1)}
+                      className="carousel-nav-btn"
                     >
-                      <span>Next</span>
-                      <ArrowRight size={16} />
+                      <ArrowLeft size={16} />
+                      <span>Previous</span>
                     </button>
-                  ) : (
+
+                    {currentQuestionIndex < totalQuestions - 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => setCurrentQuestionIndex((prev) => prev + 1)}
+                        className="carousel-nav-btn next"
+                      >
+                        <span>Next</span>
+                        <ArrowRight size={16} />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleSubmitMCQQuiz}
+                        className="carousel-nav-btn submit"
+                      >
+                        <CheckCircle size={16} />
+                        <span>Submit Quiz</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Additional Carousel Actions */}
+                  <div className="mcq-carousel-controls-row mt-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowUnmarkedDrawer(!showUnmarkedDrawer)}
+                      className="carousel-nav-btn"
+                    >
+                      <ClipboardList size={16} />
+                      <span>Unmarked Questions ({totalQuestions - Object.keys(mcqAnswers).length})</span>
+                    </button>
                     <button
                       type="button"
                       onClick={handleSubmitMCQQuiz}
                       className="carousel-nav-btn submit"
                     >
                       <CheckCircle size={16} />
-                      <span>Submit Quiz</span>
+                      <span>Submit Now</span>
                     </button>
+                  </div>
+
+                  {/* Unmarked Questions Drawer */}
+                  {showUnmarkedDrawer && (
+                    <div className="unmarked-questions-drawer mt-3 p-3 profile-section-card slide-up" style={{ animationDuration: '0.2s' }}>
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Unmarked Questions</h4>
+                      {(() => {
+                        const unmarkedIndices = (activeTest.questions as MCQQuestion[])
+                          .map((q, idx) => (mcqAnswers[q.id] === undefined ? idx : -1))
+                          .filter(idx => idx !== -1);
+
+                        if (unmarkedIndices.length === 0) {
+                          return <p className="text-xs text-emerald-400">✨ All questions have been answered!</p>;
+                        }
+
+                        return (
+                          <div className="unmarked-badges-grid">
+                            {unmarkedIndices.map((idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => {
+                                  setCurrentQuestionIndex(idx);
+                                }}
+                                className="unmarked-badge-btn"
+                              >
+                                Q{idx + 1}
+                              </button>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </div>
                   )}
-                </div>
-              </>
-            ) : (
+                </>
+              );
+            })() : (
               /* MCQ Quiz Evaluation Results View */
               <div className="quiz-results-view slide-up">
                 <div className="profile-section-card text-center">
-                  <div className="results-gauge-wrap mx-auto">
-                    <div className="results-percentage-num">
-                      {Math.round((activeTestMCQScore / totalQuestions) * 100)}%
-                    </div>
-                    <div className="results-fraction-lbl">
-                      {activeTestMCQScore} / {totalQuestions} Correct
+                  <div className="results-gauge-svg-wrap mx-auto" style={{ position: 'relative', width: '120px', height: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <svg width="120" height="120" viewBox="0 0 120 120" style={{ transform: 'rotate(-90deg)' }}>
+                      {/* Background track circle */}
+                      <circle
+                        cx="60"
+                        cy="60"
+                        r="50"
+                        stroke="var(--border-color)"
+                        strokeWidth="8"
+                        fill="transparent"
+                      />
+                      {/* Foreground active progress circle */}
+                      <circle
+                        cx="60"
+                        cy="60"
+                        r="50"
+                        stroke="var(--accent-green)"
+                        strokeWidth="8"
+                        fill="transparent"
+                        strokeLinecap="round"
+                        style={{
+                          strokeDasharray: 2 * Math.PI * 50,
+                          strokeDashoffset: 2 * Math.PI * 50 * (1 - (activeTestMCQScore / totalQuestions)),
+                          transition: 'stroke-dashoffset 0.8s ease-in-out',
+                        }}
+                      />
+                    </svg>
+                    
+                    {/* Inner Text Overlay */}
+                    <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                      <div className="results-percentage-num">
+                        {Math.round((activeTestMCQScore / totalQuestions) * 100)}%
+                      </div>
+                      <div className="results-fraction-lbl">
+                        {activeTestMCQScore} / {totalQuestions} Correct
+                      </div>
                     </div>
                   </div>
                   <h3 className="results-summary-title mt-3">Attempt Completed!</h3>
                   <p className="results-summary-desc">
                     You scored <strong>{parseFloat((activeTestMCQScore * (activeTest.totalMarks / totalQuestions)).toFixed(1))}</strong> out of {activeTest.totalMarks} marks.
+                  </p>
+                  <p className="results-summary-desc mt-2 text-slate-400" style={{ fontSize: '12px' }}>
+                    Time Taken: <strong className="text-slate-200">{formatTime(elapsedSeconds)}</strong>
                   </p>
 
                   <div className="results-action-buttons-row mt-4">
@@ -630,12 +895,25 @@ export const Test: React.FC<TestProps> = ({
               {(activeTest.questions as SubjectiveQuestion[]).map((q, idx) => {
                 const showAnswer = !!showSuggestedAnswers[q.id];
                 const currentMark = subjectiveMarks[q.id] ?? '';
+                const isBookmarked = favouriteQuestions.some(
+                  (fav) => fav.id === q.id && fav.paperId === activeTest.id
+                );
                 
                 return (
                   <div key={q.id} className="profile-section-card mt-3">
-                    <div className="explanation-header-row">
+                    <div className="explanation-header-row justify-between">
                       <span className="explanation-q-num">Question {idx + 1}</span>
-                      <span className="question-points-badge">{q.marks} Marks</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleFavouriteQuestion(q, 'Subjective')}
+                          className="test-bookmark-btn"
+                          title={isBookmarked ? "Remove Bookmark" : "Bookmark Question"}
+                        >
+                          <Star size={18} className={isBookmarked ? 'filled' : ''} />
+                        </button>
+                        <span className="question-points-badge">{q.marks} Marks</span>
+                      </div>
                     </div>
 
                     <p className="explanation-question-text mt-3" style={{ fontSize: '14px', lineHeight: '1.4' }}>
@@ -863,13 +1141,25 @@ export const Test: React.FC<TestProps> = ({
                                     <span className="paper-attempt-score">{paperScore}%</span>
                                   </div>
                                 )}
-                                <button
-                                  type="button"
-                                  onClick={() => handleStartAttempt(paper, sub)}
-                                  className="action-button-primary paper-attempt-btn"
-                                >
-                                  {isAttempted ? 'Re-attempt' : 'Attempt'}
-                                </button>
+                                <div className="paper-action-buttons-group">
+                                  {paper.type === 'MCQ' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenLeaderboard(paper)}
+                                      className="paper-leaderboard-btn"
+                                      title="View Global Leaderboard"
+                                    >
+                                      <Trophy size={16} />
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartAttempt(paper, sub)}
+                                    className="action-button-primary paper-attempt-btn"
+                                  >
+                                    {isAttempted ? 'Re-attempt' : 'Attempt'}
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           );
@@ -882,6 +1172,85 @@ export const Test: React.FC<TestProps> = ({
             })
           )}
         </div>
+      </div>
+
+      {/* Bookmarked Questions Section */}
+      <div className="profile-section-card mt-2">
+        <div className="profile-section-header orange">
+          <div className="section-icon-badge orange">
+            <Star size={18} fill="#f59e0b" />
+          </div>
+          <h3 className="section-header-title">Bookmarked Questions</h3>
+        </div>
+
+        {levelFavs.length === 0 ? (
+          <div className="no-chapters-filter text-center py-6 text-slate-400 mt-2">
+            <HelpCircle size={28} className="mx-auto mb-2 opacity-50 text-amber-500" />
+            <p className="text-sm">No bookmarked questions yet.</p>
+            <p className="text-xs text-slate-400 mt-1 max-w-[280px] mx-auto">
+              Tap the star icon during a mock test attempt to save questions here for revision.
+            </p>
+          </div>
+        ) : (
+          <div className="subject-collapsible-list mt-3">
+            {Object.entries(favsBySubject).map(([subName, favs]) => {
+              const isExpanded = !!expandedFavSubjects[subName];
+              return (
+                <div key={subName} className="subject-expand-card mt-2">
+                  <div
+                    className="subject-expand-header"
+                    onClick={() => toggleFavSubjectExpand(subName)}
+                  >
+                    <div className="subject-header-left">
+                      <div className="subject-header-details">
+                        <span className="subject-name-txt">{subName}</span>
+                        <span className="subject-chapters-count">{favs.length} Bookmarked</span>
+                      </div>
+                    </div>
+                    {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  </div>
+
+                  {isExpanded && (
+                    <div className="subject-expand-body">
+                      {favs.map((fav) => (
+                        <div key={`${fav.paperId}-${fav.id}`} className="paper-row-card py-3">
+                          <div 
+                            className="paper-row-left cursor-pointer flex-1"
+                            onClick={() => setSelectedBookmarkedQuestion(fav)}
+                          >
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={`paper-type-badge ${fav.type === 'MCQ' ? 'mcq' : 'subjective'}`}>
+                                {fav.type}
+                              </span>
+                              <span className="text-slate-400 text-[10px] truncate max-w-[150px]">
+                                {fav.paperTitle}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-200 line-clamp-2 pr-2">
+                              {fav.questionText}
+                            </p>
+                          </div>
+
+                          <div className="paper-row-right flex-shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => removeFavouriteQuestion(fav.id, fav.paperId)}
+                              className="attempt-delete-action-btn flex items-center justify-center p-2"
+                              style={{ margin: 0, padding: '6px' }}
+                              title="Remove Bookmark"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Log Score Form Toggle button */}
@@ -1072,6 +1441,269 @@ export const Test: React.FC<TestProps> = ({
           )}
         </div>
       </div>
+
+      {/* Test-wise MCQ Leaderboard Modal */}
+      {showLeaderboardModal && selectedLeaderboardTest && createPortal(
+        <div className="leaderboard-modal-overlay" onClick={() => setShowLeaderboardModal(false)}>
+          <div className="leaderboard-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="leaderboard-modal-header">
+              <div className="header-title-row">
+                <Trophy className="leaderboard-icon-gold" size={24} />
+                <div>
+                  <h3 className="leaderboard-modal-title">{selectedLeaderboardTest.title}</h3>
+                  <span className="leaderboard-modal-subtitle">Global MCQ Leaderboard</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="leaderboard-close-btn"
+                onClick={() => setShowLeaderboardModal(false)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="leaderboard-info-note">
+              <Info size={14} className="flex-shrink-0" />
+              <p>
+                Only your **first attempt** counts. Subsequent attempts or attempts with answers revealed are excluded.
+              </p>
+            </div>
+
+            <div className="leaderboard-modal-body">
+              {loadingLeaderboard ? (
+                <div className="leaderboard-status-container">
+                  <RefreshCw className="spinner-icon" size={28} />
+                  <p className="mt-2 text-sm text-slate-400">Loading rankings...</p>
+                </div>
+              ) : leaderboardError ? (
+                <div className="leaderboard-error-banner">
+                  <Info size={24} className="error-icon mb-2 text-amber-500" />
+                  <h4 className="font-semibold text-sm text-slate-200">Leaderboard Unavailable</h4>
+                  <p className="error-text text-xs mt-1 text-slate-400">{leaderboardError}</p>
+                  <p className="error-instruction mt-2 text-xs text-slate-400 opacity-80">
+                    To enable live leaderboards, execute the SQL function in <code>supabase_setup.sql</code> inside your Supabase SQL Editor.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => fetchLeaderboardData(selectedLeaderboardTest.title)}
+                    className="action-button-secondary mt-3 mx-auto flex items-center gap-1 py-1 px-3 text-xs"
+                  >
+                    <RefreshCw size={12} />
+                    <span>Try Again</span>
+                  </button>
+                </div>
+              ) : leaderboard.length === 0 ? (
+                <div className="leaderboard-empty-state text-center py-6 text-slate-400">
+                  <Users size={32} className="empty-icon mx-auto mb-2 opacity-50" />
+                  <p className="font-medium text-sm">No rankings yet</p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Be the first to attempt this test and claim Rank 1!
+                  </p>
+                </div>
+              ) : (
+                <div className="leaderboard-table-container">
+                  <div className="leaderboard-table-header">
+                    <span className="col-rank">Rank</span>
+                    <span className="col-user">User</span>
+                    <span className="col-score text-right">Score</span>
+                    <span className="col-time text-right">Time</span>
+                    <span className="col-date text-right">Date</span>
+                  </div>
+
+                  <div className="leaderboard-list-rows">
+                    {leaderboard.map((item) => {
+                      const isSelf = item.user_id === currentUserId;
+                      
+                      let rankBadge = null;
+                      if (item.rank === 1) rankBadge = <span className="rank-badge gold">🥇</span>;
+                      else if (item.rank === 2) rankBadge = <span className="rank-badge silver">🥈</span>;
+                      else if (item.rank === 3) rankBadge = <span className="rank-badge bronze">🥉</span>;
+                      else rankBadge = <span className="rank-badge default">{item.rank}</span>;
+
+                      return (
+                        <div
+                          key={item.user_id}
+                          className={`leaderboard-row-item ${isSelf ? 'is-self-highlight' : ''}`}
+                        >
+                          <div className="col-rank">
+                            {rankBadge}
+                          </div>
+                          <div className="col-user truncate">
+                            <span className="user-name-text">{item.user_name}</span>
+                            {isSelf && <span className="self-tag-badge">You</span>}
+                          </div>
+                          <div className="col-score text-right">
+                            <span className="score-pct-text">{Math.round(item.percentage)}%</span>
+                            <span className="score-marks-sub">{item.marks_obtained}/{item.total_marks} M</span>
+                          </div>
+                          <div className="col-time text-right text-slate-300 text-xs">
+                            {item.time_spent !== null && item.time_spent !== undefined
+                              ? formatTime(item.time_spent)
+                              : '--'}
+                          </div>
+                          <div className="col-date text-right">
+                            {item.attempt_date}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Bottom personal standing banner */}
+            {!loadingLeaderboard && !leaderboardError && leaderboard.length > 0 && (() => {
+              const myEntry = leaderboard.find((item) => item.user_id === currentUserId);
+              if (myEntry) {
+                return (
+                  <div className="leaderboard-my-rank-footer">
+                    <div className="my-rank-badge">
+                      Rank #{myEntry.rank}
+                    </div>
+                    <div className="my-rank-details">
+                      <span className="lbl">Your First Attempt Standing:</span>
+                      <span className="val">
+                        {Math.round(myEntry.percentage)}% ({myEntry.marks_obtained}/{myEntry.total_marks} Marks)
+                        {myEntry.time_spent !== null && myEntry.time_spent !== undefined && (
+                          <span className="text-slate-400 font-normal ml-2">
+                            in {formatTime(myEntry.time_spent)}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                );
+              } else {
+                return (
+                  <div className="leaderboard-my-rank-footer missing-attempt">
+                    <p className="text-xs text-center w-full text-slate-400">
+                      You haven't attempted this test yet (or your first attempt was manual/disqualified). Complete it to join!
+                    </p>
+                  </div>
+                );
+              }
+            })()}
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Bookmarked Question Review Modal */}
+      {selectedBookmarkedQuestion && createPortal(
+        <div className="leaderboard-modal-overlay" onClick={() => setSelectedBookmarkedQuestion(null)}>
+          <div className="leaderboard-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="leaderboard-modal-header">
+              <div className="header-title-row">
+                <Star className="leaderboard-icon-gold" size={24} fill="#fbbf24" />
+                <div>
+                  <h3 className="leaderboard-modal-title truncate max-w-[250px]">
+                    Review Question
+                  </h3>
+                  <span className="leaderboard-modal-subtitle">
+                    {selectedBookmarkedQuestion.subjectName} • {selectedBookmarkedQuestion.type}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="leaderboard-close-btn"
+                onClick={() => setSelectedBookmarkedQuestion(null)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="leaderboard-info-note" style={{ backgroundColor: 'rgba(245, 158, 11, 0.05)', borderLeftColor: '#f59e0b' }}>
+              <Info size={14} className="flex-shrink-0" style={{ color: '#f59e0b' }} />
+              <p className="text-slate-300">
+                Bookmarked from: <strong>{selectedBookmarkedQuestion.paperTitle}</strong> ({selectedBookmarkedQuestion.caLevel})
+              </p>
+            </div>
+
+            <div className="bookmark-modal-body">
+              {/* Question Text */}
+              <div className="bookmark-modal-question-box">
+                <h4 className="bookmark-modal-question-label">Question</h4>
+                <p className="bookmark-modal-question-text">
+                  {selectedBookmarkedQuestion.questionText}
+                </p>
+              </div>
+
+              {/* MCQ Options and Correct Answer/Explanation */}
+              {selectedBookmarkedQuestion.type === 'MCQ' && selectedBookmarkedQuestion.options && (
+                <div>
+                  <h4 className="bookmark-modal-options-title">Options</h4>
+                  <div className="bookmark-modal-options-list">
+                    {selectedBookmarkedQuestion.options.map((opt: string, idx: number) => {
+                      const isCorrect = idx === selectedBookmarkedQuestion.correctAnswerIndex;
+                      return (
+                        <div
+                          key={idx}
+                          className={`mcq-option-button disabled ${isCorrect ? 'reveal-correct' : ''}`}
+                          style={{ margin: 0 }}
+                        >
+                          <span className="option-letter">
+                            {String.fromCharCode(65 + idx)}
+                          </span>
+                          <span className="option-text">{opt}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {selectedBookmarkedQuestion.explanation && (
+                    <div className="explanation-reason-box mt-3">
+                      <HelpCircle size={14} className="explanation-reason-icon" />
+                      <p className="explanation-reason-text">{selectedBookmarkedQuestion.explanation}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Subjective Suggested Answer and Marks */}
+              {selectedBookmarkedQuestion.type === 'Subjective' && (
+                <div>
+                  <div className="bookmark-modal-subjective-header">
+                    <h4 className="bookmark-modal-subjective-title">Suggested Solution</h4>
+                    <span className="bookmark-modal-marks-badge">
+                      {selectedBookmarkedQuestion.marks} Marks
+                    </span>
+                  </div>
+
+                  <div className="bookmark-modal-suggested-box">
+                    {selectedBookmarkedQuestion.suggestedAnswer}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div className="bookmark-modal-footer">
+              <button
+                type="button"
+                onClick={() => {
+                  removeFavouriteQuestion(selectedBookmarkedQuestion.id, selectedBookmarkedQuestion.paperId);
+                  setSelectedBookmarkedQuestion(null);
+                }}
+                className="bookmark-modal-remove-btn"
+              >
+                <Trash2 size={16} />
+                <span>Remove Bookmark</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedBookmarkedQuestion(null)}
+                className="bookmark-modal-close-btn"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };
