@@ -1,10 +1,9 @@
-const CACHE_NAME = 'ca-next-door-v20260614T133713326Z';
+const CACHE_NAME = 'ca-next-door-v20260622T080206209Z';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/logo.png',
-  '/favicon.svg'
+  '/logo.png'
 ];
 
 self.addEventListener('install', (event) => {

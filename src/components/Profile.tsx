@@ -1,5 +1,5 @@
 import React from 'react';
-import { LogOut, ShieldAlert, Settings, Briefcase, Clock, Layers, Copy, CheckCircle, Calendar, Lock, Eye, EyeOff } from 'lucide-react';
+import { LogOut, ShieldAlert, Settings, Briefcase, Clock, Layers, Copy, CheckCircle, Calendar, Lock, Eye, EyeOff, Bell } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { CustomSelect } from './CustomSelect';
 
@@ -94,6 +94,29 @@ export const Profile: React.FC<ProfileProps> = ({
       showToast(err.message || 'An unexpected error occurred.', 'error');
     } finally {
       setPwLoading(false);
+    }
+  };
+
+  // Notification state and handler
+  const [notifPermission, setNotifPermission] = React.useState<string>(() => 
+    ('Notification' in window) ? Notification.permission : 'unsupported'
+  );
+
+  const requestNotificationPermission = async () => {
+    if (!('Notification' in window)) {
+      showToast('Notifications are not supported on this device/browser.', 'warning');
+      return;
+    }
+    try {
+      const permission = await Notification.requestPermission();
+      setNotifPermission(permission);
+      if (permission === 'granted') {
+        showToast('Notifications enabled successfully! 🔔', 'success');
+      } else if (permission === 'denied') {
+        showToast('Notifications blocked. Enable them in your browser settings.', 'warning');
+      }
+    } catch (err) {
+      showToast('Failed to request notification permission.', 'error');
     }
   };
 
@@ -421,6 +444,61 @@ export const Profile: React.FC<ProfileProps> = ({
         <p className="articleship-record-hint-note">
           Keep your articleship dates updated to accurately track your remaining leaves and plan your exam preparations effectively.
         </p>
+      </div>
+
+      {/* SECTION: Notification Settings */}
+      <div className="profile-section-card">
+        <div className="profile-section-header purple">
+          <div className="section-icon-badge purple">
+            <Bell size={18} />
+          </div>
+          <h3 className="section-header-title">System Notifications</h3>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', padding: '14px', borderRadius: '14px' }}>
+            <div style={{ textAlign: 'left' }}>
+              <div style={{ fontWeight: '700', fontSize: '14px', color: 'var(--text-primary)' }}>Level-Wise Alerts</div>
+              <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '3px', lineHeight: '1.4' }}>
+                Receive immediate alerts on mobile when new <strong>{caLevel}</strong> papers are uploaded.
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px', marginTop: '4px' }}>
+            <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Status</span>
+            <span style={{
+              fontSize: '11px',
+              padding: '4px 10px',
+              borderRadius: '20px',
+              fontWeight: '700',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+              backgroundColor: notifPermission === 'granted' ? 'rgba(34, 197, 94, 0.15)' : notifPermission === 'denied' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+              color: notifPermission === 'granted' ? '#22c55e' : notifPermission === 'denied' ? '#ef4444' : '#f59e0b'
+            }}>
+              {notifPermission === 'granted' ? 'Enabled' : notifPermission === 'denied' ? 'Blocked' : 'Not Requested'}
+            </span>
+          </div>
+
+          {notifPermission !== 'granted' && (
+            <button
+              type="button"
+              onClick={requestNotificationPermission}
+              className="profile-save-btn"
+              style={{ width: '100%', justifyContent: 'center', marginTop: '6px' }}
+            >
+              <span>Enable PWA Notifications</span>
+              <Bell size={15} />
+            </button>
+          )}
+
+          {notifPermission === 'granted' && (
+            <p style={{ fontSize: '11.5px', color: 'var(--text-muted)', textAlign: 'left', margin: '4px 0 0 4px', lineHeight: '1.4' }}>
+              ℹ️ Notifications are active. You will receive updates relevant to your level: <strong>CA {caLevel}</strong>.
+            </p>
+          )}
+        </div>
       </div>
 
       {/* SECTION: Account Security */}

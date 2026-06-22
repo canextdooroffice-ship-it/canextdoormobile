@@ -213,6 +213,24 @@ function App() {
     );
   }, [session]);
 
+  const showLocalNotification = useCallback((title: string, body: string) => {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready
+        .then((registration) => {
+          registration.showNotification(title, {
+            body,
+            icon: '/logo.png',
+            badge: '/logo.png',
+            vibrate: [200, 100, 200],
+          } as NotificationOptions & { vibrate?: number[]; badge?: string });
+        })
+        .catch(() => { new Notification(title, { body }); });
+    } else {
+      new Notification(title, { body });
+    }
+  }, []);
+
   const fetchDynamicPapers = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -252,6 +270,16 @@ function App() {
         { event: '*', schema: 'public', table: 'mock_papers' },
         (payload) => {
           console.log('Realtime change in mock_papers table:', payload);
+          if (payload.eventType === 'INSERT' && payload.new) {
+            const paper = payload.new;
+            const currentLevel = stateRef.current.caLevel;
+            if (paper.level && currentLevel && paper.level.toLowerCase() === currentLevel.toLowerCase()) {
+              showLocalNotification(
+                'New Test Paper Uploaded! 📝',
+                `A new ${paper.type} paper for ${paper.subject} is now available: "${paper.title}"`
+              );
+            }
+          }
           fetchDynamicPapers();
         }
       )
@@ -260,7 +288,7 @@ function App() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchDynamicPapers]);
+  }, [fetchDynamicPapers, showLocalNotification]);
 
   const [globalSubjects, setGlobalSubjects] = useState<any[]>([]);
 
@@ -815,24 +843,6 @@ function App() {
   const [timerStudyLabel, setTimerStudyLabel] = useState('');
   const timerIntervalRef = useRef<number | null>(null);
 
-  const showLocalNotification = useCallback((title: string, body: string) => {
-    if (!('Notification' in window) || Notification.permission !== 'granted') return;
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.ready
-        .then((registration) => {
-          registration.showNotification(title, {
-            body,
-            icon: '/logo.png',
-            badge: '/favicon.svg',
-            vibrate: [200, 100, 200],
-          } as NotificationOptions & { vibrate?: number[]; badge?: string });
-        })
-        .catch(() => { new Notification(title, { body }); });
-    } else {
-      new Notification(title, { body });
-    }
-  }, []);
-
   // Timer interval — lives at App level so it never unmounts
   useEffect(() => {
     if (timerRunning) {
@@ -1316,7 +1326,7 @@ function App() {
                 registration.showNotification(title, {
                   body: body,
                   icon: '/logo.png',
-                  badge: '/favicon.svg',
+                  badge: '/logo.png',
                   vibrate: [200, 100, 200],
                 } as NotificationOptions & { vibrate?: number[]; badge?: string });
               })

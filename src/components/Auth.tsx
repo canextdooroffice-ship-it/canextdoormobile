@@ -297,10 +297,6 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
           </>
         )}
       </div>
-
-      <div className="auth-footer-note">
-        <p>CA Next Door tracking uses Supabase Authorization to secure student dashboard records.</p>
-      </div>
     </div>
   );
 };
