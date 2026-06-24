@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Target, Plus, Trash2, X, Calendar, Check, Layers, Search, AlertCircle } from 'lucide-react';
 import type { ProgressState } from './Subjects';
 import { SYLLABUS_DATA } from '../constants/syllabus';
+import { CustomSelect } from './CustomSelect';
 
 export interface Mistake {
   id: string;
@@ -429,16 +430,15 @@ export const Analytics: React.FC<AnalyticsProps> = ({
         <div className="matrix-filter-key-row">
           <div className="matrix-filter-group">
             <span className="filter-label">FILTER SUBJECT:</span>
-            <select
+            <CustomSelect
               value={selectedSubjectFilter}
-              onChange={(e) => setSelectedSubjectFilter(e.target.value)}
+              onChange={setSelectedSubjectFilter}
+              options={[
+                { value: 'All', label: 'All Subjects (Full Matrix)' },
+                ...activeSubjects.map((sub) => ({ value: sub, label: sub }))
+              ]}
               className="matrix-subject-select"
-            >
-              <option value="All">All Subjects (Full Matrix)</option>
-              {activeSubjects.map((sub) => (
-                <option key={sub} value={sub}>{sub}</option>
-              ))}
-            </select>
+            />
           </div>
           
           <div className="matrix-frequency-key">
@@ -581,16 +581,15 @@ export const Analytics: React.FC<AnalyticsProps> = ({
           </div>
 
           <div className="revision-filters-group">
-            <select
+            <CustomSelect
               value={revisionSubjectFilter}
-              onChange={(e) => setRevisionSubjectFilter(e.target.value)}
+              onChange={setRevisionSubjectFilter}
+              options={[
+                { value: 'All', label: 'All Subjects' },
+                ...activeSubjects.map((sub) => ({ value: sub, label: sub }))
+              ]}
               className="matrix-subject-select revision-sub-select"
-            >
-              <option value="All">All Subjects</option>
-              {activeSubjects.map((sub) => (
-                <option key={sub} value={sub}>{sub}</option>
-              ))}
-            </select>
+            />
 
             <div className="revision-search-wrap">
               <Search className="revision-search-icon" size={14} />
@@ -708,62 +707,54 @@ export const Analytics: React.FC<AnalyticsProps> = ({
               <div className="profile-form-grid">
                 <div className="input-group">
                   <label>Subject</label>
-                  <select 
+                  <CustomSelect 
                     value={logSubject} 
-                    onChange={(e) => handleLogSubjectChange(e.target.value)}
+                    onChange={handleLogSubjectChange}
+                    options={activeSubjects}
                     className="styled-select-field"
-                    required
-                  >
-                    {activeSubjects.map((sub) => (
-                      <option key={sub} value={sub}>{sub}</option>
-                    ))}
-                  </select>
+                  />
                 </div>
  
                 <div className="input-group">
                   <label>Chapter</label>
-                  <select 
+                  <CustomSelect 
                     value={logChapter} 
-                    onChange={(e) => setLogChapter(e.target.value)}
+                    onChange={setLogChapter}
+                    options={logChapters}
                     className="styled-select-field"
-                    required
-                  >
-                    {logChapters.map((chap) => (
-                      <option key={chap} value={chap}>{chap}</option>
-                    ))}
-                  </select>
+                  />
                 </div>
               </div>
  
               <div className="profile-form-grid mt-3">
                 <div className="input-group">
                   <label>Mistake Type</label>
-                  <select
+                  <CustomSelect
                     value={logMistakeType}
-                    onChange={(e) => setLogMistakeType(e.target.value)}
+                    onChange={setLogMistakeType}
+                    options={[
+                      { value: 'Conceptual Gap', label: 'Conceptual Gap' },
+                      { value: 'Silly Mistake', label: 'Silly Mistake' },
+                      { value: 'Misread Question', label: 'Misread Question' },
+                      { value: 'Time Pressure', label: 'Time Pressure' },
+                      { value: 'Formula Error', label: 'Formula Error' }
+                    ]}
                     className="styled-select-field"
-                    required
-                  >
-                    <option value="Conceptual Gap">Conceptual Gap</option>
-                    <option value="Silly Mistake">Silly Mistake</option>
-                    <option value="Misread Question">Misread Question</option>
-                    <option value="Time Pressure">Time Pressure</option>
-                    <option value="Formula Error">Formula Error</option>
-                  </select>
+                  />
                 </div>
  
                 <div className="input-group">
                   <label>Severity</label>
-                  <select
+                  <CustomSelect
                     value={logSeverity}
-                    onChange={(e) => setLogSeverity(e.target.value)}
+                    onChange={setLogSeverity}
+                    options={[
+                      { value: 'High (Critical)', label: 'High (Critical)' },
+                      { value: 'Medium (Warning)', label: 'Medium (Warning)' },
+                      { value: 'Low (Minor)', label: 'Low (Minor)' }
+                    ]}
                     className="styled-select-field"
-                    required
-                  >
-                    <option value="High (Critical)">High (Critical)</option>
-                    <option value="Medium (Warning)">Medium (Warning)</option>
-                    <option value="Low (Minor)">Low (Minor)</option>
-                  </select>
+                  />
                 </div>
               </div>
  
@@ -959,46 +950,38 @@ export const Analytics: React.FC<AnalyticsProps> = ({
               <div className="profile-form-grid">
                 <div className="input-group">
                   <label>Subject</label>
-                  <select 
+                  <CustomSelect 
                     value={addSubject} 
-                    onChange={(e) => handleAddSubjectChange(e.target.value)}
+                    onChange={handleAddSubjectChange}
+                    options={activeSubjects}
                     className="styled-select-field"
-                    required
-                  >
-                    {activeSubjects.map((sub) => (
-                      <option key={sub} value={sub}>{sub}</option>
-                    ))}
-                  </select>
+                  />
                 </div>
  
                 <div className="input-group">
                   <label>Chapter</label>
-                  <select 
+                  <CustomSelect 
                     value={addChapter} 
-                    onChange={(e) => setAddChapter(e.target.value)}
+                    onChange={setAddChapter}
+                    options={addChapters}
                     className="styled-select-field"
-                    required
-                  >
-                    {addChapters.map((chap) => (
-                      <option key={chap} value={chap}>{chap}</option>
-                    ))}
-                  </select>
+                  />
                 </div>
               </div>
  
               <div className="profile-form-grid mt-3">
                 <div className="input-group">
                   <label>Requirement</label>
-                  <select
+                  <CustomSelect
                     value={addRequirement}
-                    onChange={(e) => setAddRequirement(e.target.value as 'REV1' | 'REV2' | 'REV3')}
+                    onChange={(val) => setAddRequirement(val as 'REV1' | 'REV2' | 'REV3')}
+                    options={[
+                      { value: 'REV1', label: 'Revision 1 (REV1)' },
+                      { value: 'REV2', label: 'Revision 2 (REV2)' },
+                      { value: 'REV3', label: 'Revision 3 (REV3)' }
+                    ]}
                     className="styled-select-field"
-                    required
-                  >
-                    <option value="REV1">Revision 1 (REV1)</option>
-                    <option value="REV2">Revision 2 (REV2)</option>
-                    <option value="REV3">Revision 3 (REV3)</option>
-                  </select>
+                  />
                 </div>
  
                 <div className="input-group">

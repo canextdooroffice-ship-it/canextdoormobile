@@ -16,6 +16,8 @@ import { Tools } from './components/Tools';
 import { LinksManager } from './components/LinksManager';
 import { TimeManager } from './components/TimeManager';
 import { StudyBuddy } from './components/StudyBuddy';
+import { Timeline } from './components/Timeline';
+import type { TimelinePhase } from './components/Timeline';
 import type { TestRecord } from './components/Test';
 import { AdminPanel } from './components/AdminPanel';
 import type { MockTestPaper } from './constants/mockTests';
@@ -623,6 +625,7 @@ function App() {
   }, [caLevel, progressState]);
   const [fullName, setFullName] = useState<string>(() => loadFromStorage(LS_KEYS.FULL_NAME, ''));
   const [examStartDate, setExamStartDate] = useState<string>(() => loadFromStorage(LS_KEYS.EXAM_START_DATE, ''));
+  const [timelinePhases, setTimelinePhases] = useState<TimelinePhase[]>(() => loadFromStorage('cand_timeline_phases', []));
   const [preparingFor, setPreparingFor] = useState<'Group 1' | 'Group 2' | 'Both Groups'>(() => {
     try {
       const val = localStorage.getItem('cand_preparingFor');
@@ -920,6 +923,7 @@ function App() {
   useEffect(() => { saveToStorage(LS_KEYS.TOTAL_HOURS, totalHours); }, [totalHours]);
   useEffect(() => { saveToStorage(LS_KEYS.FULL_NAME, fullName); }, [fullName]);
   useEffect(() => { saveToStorage(LS_KEYS.EXAM_START_DATE, examStartDate); }, [examStartDate]);
+  useEffect(() => { saveToStorage('cand_timeline_phases', timelinePhases); }, [timelinePhases]);
   useEffect(() => { localStorage.setItem('cand_preparingFor', preparingFor); }, [preparingFor]);
   useEffect(() => {
     saveToStorage(LS_KEYS.TODAY_HOURS, todayHours);
@@ -953,10 +957,10 @@ function App() {
   const hasSyncedRef = useRef(false); // prevent double-load on mount
 
   // Ref to always hold the latest state values for loadCloudData callbacks without stale closure issues
-  const stateRef = useRef({ progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, favouriteQuestions });
+  const stateRef = useRef({ progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, favouriteQuestions, timelinePhases });
   useEffect(() => {
-    stateRef.current = { progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, favouriteQuestions };
-  }, [progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, favouriteQuestions]);
+    stateRef.current = { progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, favouriteQuestions, timelinePhases };
+  }, [progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, favouriteQuestions, timelinePhases]);
 
   // Load cloud data on login (restores progress on new device)
   const loadCloudData = useCallback(async (userId: string, email: string) => {
@@ -978,7 +982,7 @@ function App() {
             'cand_schedule_slots', 'cand_planner_tasks', 'cand_revisions', 'cand_mistakes',
             'cand_streakCount', 'cand_checkedInToday', 'cand_checkInHistory', 'cand_studyHistory',
             'cand_wakeHistory', 'cand_sleepHistory', 'cand_studyLogs', 'cand_lastCheckInDate',
-            'cand_subjectGroups', 'cand_preparingFor', 'cand_tests'
+            'cand_subjectGroups', 'cand_preparingFor', 'cand_tests', 'cand_timeline_phases'
           ];
           keys.forEach(k => localStorage.removeItem(k));
           
@@ -1013,6 +1017,7 @@ function App() {
             tests?: TestRecord[];
             favouriteQuestions?: any[];
             streakMigrated?: boolean;
+            timelinePhases?: TimelinePhase[];
           };
           setProgressState(packed.checklist || {});
           setTasks(packed.tasks || []);
@@ -1023,6 +1028,7 @@ function App() {
           setFavouriteQuestions(packed.favouriteQuestions || []);
           if (packed.fullName) setFullName(packed.fullName);
           if (packed.examStartDate) setExamStartDate(packed.examStartDate);
+          if (packed.timelinePhases) setTimelinePhases(packed.timelinePhases);
           // Load checkInHistory from cloud if present
           if (packed.checkInHistory) {
             setCheckInHistory(packed.checkInHistory);
@@ -1192,7 +1198,8 @@ function App() {
         preparingFor,
         tests,
         favouriteQuestions,
-        streakMigrated: true
+        streakMigrated: true,
+        timelinePhases
       };
 
       saveToSupabase(userId, {
@@ -1208,7 +1215,7 @@ function App() {
     return () => {
       if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     };
-  }, [progressState, caLevel, studyTarget, totalHours, fullName, examStartDate, tasks, revisions, mistakes, slots, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, favouriteQuestions, session]);
+  }, [progressState, caLevel, studyTarget, totalHours, fullName, examStartDate, tasks, revisions, mistakes, slots, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, favouriteQuestions, session, timelinePhases]);
 
   // Listen for service worker update events from main.tsx
   useEffect(() => {
@@ -1673,6 +1680,7 @@ function App() {
     setSubjectGroups({});
     setPreparingFor('Both Groups');
     setTests([]);
+    setTimelinePhases([]);
 
     localStorage.removeItem(LS_KEYS.CA_LEVEL);
     localStorage.removeItem(LS_KEYS.STUDY_TARGET);
@@ -1697,6 +1705,7 @@ function App() {
     localStorage.removeItem('cand_subjectGroups');
     localStorage.removeItem('cand_preparingFor');
     localStorage.removeItem('cand_tests');
+    localStorage.removeItem('cand_timeline_phases');
   };
 
   const handleLogout = () => {
@@ -1764,6 +1773,16 @@ function App() {
                 userEmail={session?.user?.email || ''}
                 progressState={progressState}
                 subjectGroups={subjectGroups}
+                onBack={() => setActiveTab('tools')}
+                isAdmin={isAdmin}
+              />
+            )}
+            {activeTab === 'timeline' && (
+              <Timeline
+                examStartDate={examStartDate}
+                onUpdateExamStartDate={setExamStartDate}
+                timelinePhases={timelinePhases}
+                onUpdateTimelinePhases={setTimelinePhases}
                 onBack={() => setActiveTab('tools')}
               />
             )}

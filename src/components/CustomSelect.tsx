@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
 interface CustomSelectProps {
   value: string;
@@ -16,6 +16,8 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   className = 'styled-select'
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [openUpward, setOpenUpward] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const getLabel = () => {
     const found = options.find(opt => 
@@ -27,8 +29,24 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
     return placeholder || value || '';
   };
 
+  useEffect(() => {
+    if (isOpen && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const spaceBelow = viewportHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      
+      // Open upward only if space below is tight (< 200px) AND there is more space above than below
+      if (spaceBelow < 200 && spaceAbove > spaceBelow) {
+        setOpenUpward(true);
+      } else {
+        setOpenUpward(false);
+      }
+    }
+  }, [isOpen]);
+
   return (
-    <div className="custom-select-wrapper">
+    <div className="custom-select-wrapper" ref={containerRef}>
       <button
         type="button"
         className={className}
@@ -40,7 +58,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
       {isOpen && (
         <>
           <div className="dropdown-overlay" onClick={() => setIsOpen(false)} />
-          <div className="custom-select-popover">
+          <div className={`custom-select-popover ${openUpward ? 'open-upward' : ''}`}>
             {options.length === 0 ? (
               <div className="custom-select-option disabled" style={{ opacity: 0.6, cursor: 'default' }}>
                 No Options Available

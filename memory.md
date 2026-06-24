@@ -1,6 +1,6 @@
 # CA Next Door PWA Mobile — Codebase Memory
 
-> **Last Updated:** 2026-06-22  
+> **Last Updated:** 2026-06-24  
 > **Purpose:** Quick-reference document for AI agents to understand the entire codebase before making changes.
 
 ---
@@ -66,9 +66,9 @@ CA Next Door PWA Mobile/
 │   └── icons.svg                 # SVG icon set
 ├── src/
 │   ├── main.tsx                  # Entry: renders <App/>, registers SW, handles updates
-│   ├── App.tsx                   # ⭐ MONOLITHIC MAIN FILE (~2100 lines, ~80KB)
+│   ├── App.tsx                   # ⭐ MONOLITHIC MAIN FILE (~2110 lines, ~80KB)
 │   ├── supabaseClient.ts         # Supabase client initialization with fallback
-│   ├── index.css                 # ⭐ ALL STYLES (~11,700 lines, ~235KB)
+│   ├── index.css                 # ⭐ ALL STYLES (~12,600 lines, ~251KB)
 │   ├── components/
 │   │   ├── AdminPanel.tsx        # Admin: manage subjects, mock papers, users (~67KB)
 │   │   ├── Analytics.tsx         # Revision tracker & mistake journal (~42KB)
@@ -82,6 +82,7 @@ CA Next Door PWA Mobile/
 │   │   ├── StudyBuddy.tsx        # Social: buddy codes, groups, leaderboard (~44KB)
 │   │   ├── Subjects.tsx          # Subject/chapter checklist with progress (~40KB)
 │   │   ├── Test.tsx              # Mock test system: MCQ + Subjective (~72KB)
+│   │   ├── Timeline.tsx          # Study timeline planning & roadmap (~25KB)
 │   │   ├── TimeManager.tsx       # Study time allocation analysis (~12KB)
 │   │   └── Tools.tsx             # Tools hub page (links to sub-features) (~2.6KB)
 │   ├── constants/
@@ -120,6 +121,7 @@ CA Next Door PWA Mobile/
 | `links-manager` | `<LinksManager>` | Back → tools |
 | `time-manager` | `<TimeManager>` | Back → tools |
 | `study-buddy` | `<StudyBuddy>` | Back → tools |
+| `timeline` | `<Timeline>` | Back → tools |
 | `test` | `<Test>` | Back → subjects |
 
 ### 4.2 State Management — ALL IN `App.tsx` (No External Library)
@@ -172,13 +174,14 @@ All state lives in `App.tsx` via `useState` hooks and is **props-drilled** to ch
 | `checkedInToday` | boolean (useMemo) | Derived: today in checkInHistory? |
 | `streakCount` | number (useMemo) | Derived: consecutive activity days |
 
-**Planner Data:**
+**Planner & Timeline Data:**
 | State | Type | Purpose |
 |-------|------|---------|
 | `slots` | ScheduleSlot[] | Timetable schedule slots |
 | `tasks` | Task[] | Planner task items |
 | `revisions` | RevisionItem[] | Revision tracking items |
 | `mistakes` | Mistake[] | Mistake log items |
+| `timelinePhases` | TimelinePhase[] | Study timeline milestones / phases |
 
 **Subject Grouping:**
 | State | Type | Purpose |
@@ -270,6 +273,17 @@ interface SubjectiveQuestion {
   question: string;
   marks: number;
   suggestedAnswer: string;
+}
+
+// Timeline phase — imported from ./components/Timeline
+interface TimelinePhase {
+  id: string;
+  name: string;
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD
+  status: 'pending' | 'in-progress' | 'completed';
+  color: string; // 'indigo' | 'sky' | 'amber' | 'emerald' | 'rose'
+  notes?: string;
 }
 ```
 
@@ -470,12 +484,12 @@ When `caLevel` changes:
 
 **Props received:** Extensive — caLevel, progressState, studyTarget, totalHours, todayHours, streakCount, checkedInToday, studyHistory, studyLogs, slots, tasks, subjectGroups, wakeHistory, sleepHistory, selectedDate, darkMode, + many callbacks
 
-### 6.4 `Subjects.tsx` (~1100 lines)
+### 6.4 `Subjects.tsx` (~1070 lines)
 - Lists all subjects for current CA level
 - Each subject expands to show chapters
 - **Chapter operations:** toggle classDone, set priority (A/B/C), toggle LDRS, cycle revision (0→1→2→3), add notes, set video URL
 - Add/remove custom subjects and chapters
-- Search/filter by name, filter by group
+- **Search/filter:** Search by subject name or chapter name, filter by group/priority/status
 - Progress bar per subject
 - Navigate to Test tab
 - **Exports `ProgressState` type** — imported by App.tsx and others
@@ -518,15 +532,17 @@ Three sections:
 2. **Mock Paper Management:** CRUD for `mock_papers`. Question editor (MCQ options + correct answer + explanation). Import/Export JSON. Set marks, time limits.
 3. **User Management:** View all users with stats. Activate/deactivate (`is_active`). View individual progress. Export to Excel (xlsx).
 
-### 6.9 `StudyBuddy.tsx` (~1100 lines)
+### 6.9 `StudyBuddy.tsx` (~1200 lines)
 - **Buddy system:** Add buddies via deterministic share codes (`CA-{NAME}{ID}`)
+- **Search bar:** Filter buddies by name or buddy code.
+- **Admin features:** If `isAdmin` is true, automatically queries all active users from Supabase and merges them into the study buddy list on mount.
 - **Groups:** Create (`GRP-` codes), Join, Add members, Delete/Leave
 - **Leaderboard:** Ranks members by weighted completion (1.5× for Group 1/2 subjects)
 - **Weighted progress formula:** Each chapter = 4 points max (1 classDone + 3 revisionCycles)
 - **Realtime:** Supabase subscription on `user_progress` for live buddy status
-- Resolves buddy codes by querying `user_progress` table
-- Modal sheets via `createPortal`
-- Persisted in localStorage (`cand_study_buddies_v2`, `cand_study_groups_v2`)
+- **Resolves buddy codes by querying `user_progress` table
+- **Modal sheets via `createPortal`
+- **Persisted in localStorage (`cand_study_buddies_v2`, `cand_study_groups_v2`)
 
 ### 6.10 `TimeManager.tsx` (~323 lines)
 - **NOT a timer** — it's a time allocation ANALYSIS tool
@@ -548,11 +564,12 @@ Three sections:
 - Uses `CustomSelect` for course level dropdown
 - All profile fields persisted in localStorage with `cand_` prefix
 
-### 6.12 `Tools.tsx` (~82 lines)
-- Navigation hub with 3 tool cards:
+### 6.12 `Tools.tsx` (~97 lines)
+- Navigation hub with 4 tool cards:
   1. Links Manager (`links-manager`)
   2. Time Manager (`time-manager`)
   3. Study Buddy & Groups (`study-buddy`)
+  4. Timeline (`timeline`)
 - "Coming soon" banner
 - Calls `onOpenTool(toolId)` → parent sets `activeTab`
 
@@ -573,11 +590,20 @@ Three sections:
 - Active tab dot indicator
 - Icons: Home, BookOpen, Calendar, BarChart2, User, Shield
 
-### 6.15 `CustomSelect.tsx` (~72 lines)
+### 6.15 `CustomSelect.tsx` (~90 lines)
 - Reusable styled dropdown replacing native `<select>`
 - Supports `string[]` or `{value, label}[]` options
 - Click-to-open popover, overlay for outside-click dismiss
-- Used by Profile.tsx
+- **Smart positioning:** Automatically detects viewport boundaries and opens upwards only when space below is tight (<200px) AND there is more available space above the trigger than below it, preventing clipping inside scrollable modal containers.
+- Used by Profile.tsx, Analytics.tsx, Subjects.tsx, Test.tsx, LinksManager.tsx, StudyBuddy.tsx, Dashboard.tsx, Planner.tsx, and Timeline.tsx (replacing native selects for full design consistency across student-facing features).
+
+### 6.16 `Timeline.tsx` (~711 lines)
+- Study timeline planner and visual roadmap tracker.
+- Features target exam date configuration, countdown tracking, manual CRUD actions for customized phase milestones (title, start/end dates, status, notes, color theme).
+- Groups overlapping/same-period phases to display side-by-side.
+- Renders daily progress contribution blocks colored by past elapsed status and interactive manual completion toggles.
+- Uses `CustomSelect` for status select dropdown and circular picker for tag accent colors.
+- Persisted in localStorage key `cand_timeline_phases` and synced to Supabase backup.
 
 ---
 
@@ -776,22 +802,23 @@ SYLLABUS_DATA = {
 
 | File | Size | Lines |
 |------|------|-------|
-| `src/index.css` | 235 KB | ~11,700 |
-| `src/App.tsx` | 80 KB | ~2,100 |
+| `src/index.css` | 252 KB | ~12,750 |
+| `src/App.tsx` | 80 KB | ~2,110 |
 | `src/components/Test.tsx` | 72 KB | ~2,000 |
 | `src/components/AdminPanel.tsx` | 67 KB | ~1,800 |
 | `src/components/Planner.tsx` | 67 KB | ~1,800 |
-| `src/components/StudyBuddy.tsx` | 44 KB | ~1,100 |
+| `src/components/Timeline.tsx` | 27 KB | ~711 |
+| `src/components/StudyBuddy.tsx` | 48 KB | ~1,200 |
 | `src/components/Analytics.tsx` | 42 KB | ~1,200 |
-| `src/components/Subjects.tsx` | 40 KB | ~1,100 |
+| `src/components/Subjects.tsx` | 42 KB | ~1,070 |
 | `src/components/Dashboard.tsx` | 39 KB | ~1,100 |
 | `src/components/Profile.tsx` | 23 KB | ~596 |
 | `src/components/LinksManager.tsx` | 16 KB | ~461 |
 | `src/components/TimeManager.tsx` | 12 KB | ~323 |
 | `src/components/Auth.tsx` | 10 KB | ~300 |
 | `src/constants/syllabus.ts` | 6 KB | ~157 |
-| `src/components/Tools.tsx` | 2.6 KB | ~82 |
+| `src/components/Tools.tsx` | 2.6 KB | ~97 |
 | `src/lib/syncProgress.ts` | 2.3 KB | ~79 |
-| `src/components/CustomSelect.tsx` | 2 KB | ~72 |
+| `src/components/CustomSelect.tsx` | 2.5 KB | ~90 |
 | `src/components/BottomNav.tsx` | 1.4 KB | ~48 |
 | `src/constants/mockTests.ts` | 596 B | ~29 |

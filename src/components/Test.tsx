@@ -6,6 +6,7 @@ import { MOCK_TESTS_DATA } from '../constants/mockTests';
 import type { MockTestPaper, MCQQuestion, SubjectiveQuestion } from '../constants/mockTests';
 import type { ProgressState } from './Subjects';
 import { supabase } from '../supabaseClient';
+import { CustomSelect } from './CustomSelect';
 
 
 export interface TestRecord {
@@ -1017,15 +1018,16 @@ export const Test: React.FC<TestProps> = ({
           <span>Subjects</span>
         </button>
         <div className="test-header-select-wrapper">
-          <select
+          <CustomSelect
             value={caLevel}
-            onChange={(e) => onChangeCaLevel(e.target.value)}
+            onChange={onChangeCaLevel}
+            options={[
+              { value: 'Foundation', label: 'CA Foundation' },
+              { value: 'Intermediate', label: 'CA Intermediate' },
+              { value: 'Final', label: 'CA Final' }
+            ]}
             className="test-header-level-select"
-          >
-            <option value="Foundation">CA Foundation</option>
-            <option value="Intermediate">CA Intermediate</option>
-            <option value="Final">CA Final</option>
-          </select>
+          />
           <ChevronDown size={14} className="test-select-chevron" />
         </div>
       </div>
@@ -1276,19 +1278,13 @@ export const Test: React.FC<TestProps> = ({
             <form onSubmit={handleLogScoreSubmit} className="log-form mt-3">
               <div className="input-group">
                 <label>Subject</label>
-                <select
+                <CustomSelect
                   value={subjectName}
-                  onChange={(e) => setSubjectName(e.target.value)}
+                  onChange={setSubjectName}
+                  options={activeSubjects.length > 0 ? activeSubjects : []}
+                  placeholder={activeSubjects.length === 0 ? "No active subjects found" : "Select Subject"}
                   className="styled-select"
-                  required
-                >
-                  {activeSubjects.map((sub) => (
-                    <option key={sub} value={sub}>{sub}</option>
-                  ))}
-                  {activeSubjects.length === 0 && (
-                    <option value="">No active subjects found</option>
-                  )}
-                </select>
+                />
               </div>
 
               <div className="input-group mt-3">

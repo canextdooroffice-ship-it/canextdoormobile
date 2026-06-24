@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, Users, UserPlus, Copy, User, Check, X, Plus, LogIn, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Users, UserPlus, Copy, User, Check, X, Plus, LogIn, RefreshCw, Search } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import { CustomSelect } from './CustomSelect';
 
 interface Buddy {
   id: string;
@@ -29,6 +30,7 @@ interface StudyBuddyProps {
   progressState: any;
   subjectGroups: Record<string, 'Group 1' | 'Group 2'>;
   onBack: () => void;
+  isAdmin?: boolean;
 }
 
 // Helper: Calculate progress percentage based on 3 criteria weighted score
@@ -89,6 +91,7 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
   progressState,
   subjectGroups,
   onBack,
+  isAdmin = false,
 }) => {
   // Generate deterministic share code
   const userShareCode = useMemo(() => {
@@ -135,6 +138,19 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
   const [copied, setCopied] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Local state for buddy search
+  const [buddySearchQuery, setBuddySearchQuery] = useState('');
+
+  // Memoized filtered buddies list
+  const filteredBuddiesList = useMemo(() => {
+    if (!buddySearchQuery.trim()) return buddies;
+    const query = buddySearchQuery.toLowerCase().trim();
+    return buddies.filter(buddy => 
+      buddy.name.toLowerCase().includes(query) || 
+      buddy.code.toLowerCase().includes(query)
+    );
+  }, [buddies, buddySearchQuery]);
 
   // Group Form states
   const [isJoinGroupOpen, setIsJoinGroupOpen] = useState(false);
@@ -245,6 +261,81 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Auto-add all active users if the current user is an admin
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    const fetchAllActiveUsers = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('user_progress')
+          .select('user_id, full_name, email, progress_state, is_active')
+          .eq('is_active', true);
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          setBuddies(prev => {
+            const existingIds = new Set(prev.map(b => b.id));
+            const newBuddies: Buddy[] = [];
+            const updatedBuddiesMap = new Map(prev.map(b => [b.id, b]));
+
+            data.forEach(row => {
+              // Skip the admin's own ID
+              if (row.user_id === userId) return;
+
+              const completion = calculateWeightedProgress(row.progress_state, subjectGroups);
+              const name = row.full_name || row.email || 'Study Buddy';
+              const status = row.is_active ? 'Online' : 'Offline';
+
+              let baseCode = 'STUDENT';
+              if (row.full_name) {
+                baseCode = row.full_name.replace(/\s+/g, '').substring(0, 4).toUpperCase();
+              } else if (row.email) {
+                baseCode = row.email.split('@')[0].substring(0, 4).toUpperCase();
+              }
+              const suffix = row.user_id ? row.user_id.substring(row.user_id.length - 4).toUpperCase() : '2026';
+              const code = `CA-${baseCode}${suffix}`;
+
+              if (existingIds.has(row.user_id)) {
+                // Update properties of existing buddy
+                const existing = updatedBuddiesMap.get(row.user_id);
+                if (existing) {
+                  updatedBuddiesMap.set(row.user_id, {
+                    ...existing,
+                    name,
+                    completionPercentage: completion,
+                    status
+                  });
+                }
+              } else {
+                newBuddies.push({
+                  id: row.user_id,
+                  name,
+                  code,
+                  status,
+                  completionPercentage: completion
+                });
+              }
+            });
+
+            if (newBuddies.length > 0) {
+              showToastMsg(`Automatically added ${newBuddies.length} active users as buddies! 🤝`);
+            }
+
+            const updatedExisting = prev.map(b => updatedBuddiesMap.get(b.id) || b);
+            return [...newBuddies, ...updatedExisting];
+          });
+        }
+      } catch (err) {
+        console.warn('Failed to auto-add active users for admin:', err);
+      }
+    };
+
+    fetchAllActiveUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, userId, subjectGroups]);
 
   // Listen to realtime updates on user_progress table
   useEffect(() => {
@@ -788,15 +879,30 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
               </form>
 
               {/* Buddies list */}
-              <h4 className="list-title-header">Your Study Buddies ({buddies.length})</h4>
+              <div className="search-bar-wrapper" style={{ margin: '16px 0 12px 0', position: 'relative' }}>
+                <Search size={16} className="search-bar-icon" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  type="text"
+                  placeholder="Search buddies by name or code..."
+                  value={buddySearchQuery}
+                  onChange={(e) => setBuddySearchQuery(e.target.value)}
+                  className="search-bar-input"
+                />
+              </div>
+
+              <h4 className="list-title-header">Your Study Buddies ({filteredBuddiesList.length})</h4>
               <div className="buddies-list">
-                {buddies.length === 0 ? (
+                {filteredBuddiesList.length === 0 ? (
                   <div className="buddies-empty">
                     <User size={32} className="empty-icon" />
-                    <p>No buddies added yet. Share your code to study together!</p>
+                    <p>
+                      {buddySearchQuery.trim()
+                        ? 'No buddies match your search.'
+                        : 'No buddies added yet. Share your code to study together!'}
+                    </p>
                   </div>
                 ) : (
-                  buddies.map(buddy => {
+                  filteredBuddiesList.map(buddy => {
                     const statusClass = buddy.status.toLowerCase();
                     return (
                       <div key={buddy.id} className="buddy-card">
@@ -1035,25 +1141,20 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
                         {buddies.filter(b => !isAddMemberOpen.members.includes(b.name)).length === 0 ? (
                           <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '4px 0' }}>No eligible buddies to add. All your buddies are already in this group, or you have no buddies added.</p>
                         ) : (
-                          <select 
-                            value={selectedBuddyToAdd} 
-                            onChange={(e) => {
-                              setSelectedBuddyToAdd(e.target.value);
-                              if (e.target.value) setManualMemberCode(''); // Clear manual input
+                          <CustomSelect
+                            value={selectedBuddyToAdd}
+                            onChange={(val) => {
+                              setSelectedBuddyToAdd(val);
+                              if (val) setManualMemberCode(''); // Clear manual input
                             }}
+                            options={[
+                              { value: '', label: '-- Choose a Buddy --' },
+                              ...buddies
+                                .filter(b => !isAddMemberOpen.members.includes(b.name))
+                                .map(b => ({ value: b.name, label: `${b.name} (${b.code})` }))
+                            ]}
                             className="styled-buddy-input"
-                            style={{ width: '100%', height: '42px', padding: '8px 12px' }}
-                          >
-                            <option value="">-- Choose a Buddy --</option>
-                            {buddies
-                              .filter(b => !isAddMemberOpen.members.includes(b.name))
-                              .map(b => (
-                                <option key={b.id} value={b.name}>
-                                  {b.name} ({b.code})
-                                </option>
-                              ))
-                            }
-                          </select>
+                          />
                         )}
                       </div>
                       

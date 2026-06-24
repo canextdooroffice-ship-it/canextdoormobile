@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, ChevronUp, Trash2, Plus, Search, Filter, Play, Sparkles, Check, CheckCircle, Bold, Italic, Underline, List, Highlighter, Palette, ClipboardList } from 'lucide-react';
 import { SYLLABUS_DATA } from '../constants/syllabus';
+import { CustomSelect } from './CustomSelect';
 
 export interface ChapterStatus {
   classDone: boolean;
@@ -219,6 +220,52 @@ export const Subjects: React.FC<SubjectsProps> = ({
     return Math.round((completedPoints / totalPoints) * 100);
   };
 
+  // Get subjects that actually match all filters (and have at least one matching chapter)
+  const getFilteredSubjectsList = () => {
+    return getAllSubjects().filter((subName) => {
+      const chapters = getSubjectChapters(subName);
+      
+      const filteredChapters = chapters.filter((chap) => {
+        const status = progressState[subName]?.[chap] || {
+          classDone: false,
+          priority: 'C',
+          ldrs: false,
+          revisionCycle: 0,
+        };
+        const p = status.priority;
+
+        // Search Query filter: matches chapter name OR subject name
+        const matchesSubject = subName.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesChapter = chap.toLowerCase().includes(searchQuery.toLowerCase());
+        if (searchQuery.trim() && !matchesSubject && !matchesChapter) {
+          return false;
+        }
+
+        // Priority filter
+        if (priorityFilter !== 'ALL' && p !== priorityFilter) {
+          return false;
+        }
+
+        // Status checkbox filter
+        if (selectedStatuses.length > 0) {
+          const matchesAny = selectedStatuses.some((filterVal) => {
+            if (filterVal === 'NO_CLASS') return !status.classDone;
+            if (filterVal === 'CLASS_DONE') return status.classDone;
+            if (filterVal === 'R1_DONE') return status.revisionCycle >= 1;
+            if (filterVal === 'R2_DONE') return status.revisionCycle >= 2;
+            if (filterVal === 'R3_DONE') return status.revisionCycle >= 3;
+            return true;
+          });
+          if (!matchesAny) return false;
+        }
+
+        return true;
+      });
+
+      return filteredChapters.length > 0;
+    });
+  };
+
   const renderSubjectCard = (subName: string) => {
     const chapters = getSubjectChapters(subName);
     const isExpanded = !!expandedSubjects[subName];
@@ -234,8 +281,10 @@ export const Subjects: React.FC<SubjectsProps> = ({
       };
       const p = status.priority;
 
-      // Search Query filter
-      if (searchQuery.trim() && !chap.toLowerCase().includes(searchQuery.toLowerCase())) {
+      // Search Query filter: matches chapter name OR subject name
+      const matchesSubject = subName.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesChapter = chap.toLowerCase().includes(searchQuery.toLowerCase());
+      if (searchQuery.trim() && !matchesSubject && !matchesChapter) {
         return false;
       }
       // Priority filter
@@ -258,8 +307,8 @@ export const Subjects: React.FC<SubjectsProps> = ({
       return true;
     });
 
-    // Don't render subject card if searching and no matches found
-    if (searchQuery.trim() && filteredChapters.length === 0) {
+    // Don't render subject card if no matches found
+    if (filteredChapters.length === 0) {
       return null;
     }
 
@@ -652,15 +701,12 @@ export const Subjects: React.FC<SubjectsProps> = ({
             </div>
             <div className="input-group mt-3">
               <label>Subject</label>
-              <select
+              <CustomSelect
                 value={newChapterSub}
-                onChange={(e) => setNewChapterSub(e.target.value)}
+                onChange={setNewChapterSub}
+                options={getAllSubjects()}
                 className="styled-select"
-              >
-                {getAllSubjects().map((sub) => (
-                  <option key={sub} value={sub}>{sub}</option>
-                ))}
-              </select>
+              />
             </div>
             <div className="input-group mt-3">
               <label>Priority</label>
@@ -726,13 +772,13 @@ export const Subjects: React.FC<SubjectsProps> = ({
           <div className="subject-group-header">
             <span className="group-title-label">No Group</span>
             <span className="group-count-badge">
-              {getAllSubjects().filter(sub => !subjectGroups[sub]).length}
+              {getFilteredSubjectsList().filter(sub => !subjectGroups[sub]).length}
             </span>
           </div>
-          {getAllSubjects().filter(sub => !subjectGroups[sub]).length === 0 ? (
-            <p className="no-subjects-msg">No ungrouped subjects.</p>
+          {getFilteredSubjectsList().filter(sub => !subjectGroups[sub]).length === 0 ? (
+            <p className="no-subjects-msg">No ungrouped subjects matching filters.</p>
           ) : (
-            getAllSubjects()
+            getFilteredSubjectsList()
               .filter(sub => !subjectGroups[sub])
               .map((subName) => renderSubjectCard(subName))
           )}
@@ -743,13 +789,13 @@ export const Subjects: React.FC<SubjectsProps> = ({
           <div className="subject-group-header">
             <span className="group-title-label">Group 1</span>
             <span className="group-count-badge">
-              {getAllSubjects().filter(sub => subjectGroups[sub] === 'Group 1').length}
+              {getFilteredSubjectsList().filter(sub => subjectGroups[sub] === 'Group 1').length}
             </span>
           </div>
-          {getAllSubjects().filter(sub => subjectGroups[sub] === 'Group 1').length === 0 ? (
-            <p className="no-subjects-msg">No Group 1 subjects assigned.</p>
+          {getFilteredSubjectsList().filter(sub => subjectGroups[sub] === 'Group 1').length === 0 ? (
+            <p className="no-subjects-msg">No Group 1 subjects matching filters.</p>
           ) : (
-            getAllSubjects()
+            getFilteredSubjectsList()
               .filter(sub => subjectGroups[sub] === 'Group 1')
               .map((subName) => renderSubjectCard(subName))
           )}
@@ -760,13 +806,13 @@ export const Subjects: React.FC<SubjectsProps> = ({
           <div className="subject-group-header">
             <span className="group-title-label">Group 2</span>
             <span className="group-count-badge">
-              {getAllSubjects().filter(sub => subjectGroups[sub] === 'Group 2').length}
+              {getFilteredSubjectsList().filter(sub => subjectGroups[sub] === 'Group 2').length}
             </span>
           </div>
-          {getAllSubjects().filter(sub => subjectGroups[sub] === 'Group 2').length === 0 ? (
-            <p className="no-subjects-msg">No Group 2 subjects assigned.</p>
+          {getFilteredSubjectsList().filter(sub => subjectGroups[sub] === 'Group 2').length === 0 ? (
+            <p className="no-subjects-msg">No Group 2 subjects matching filters.</p>
           ) : (
-            getAllSubjects()
+            getFilteredSubjectsList()
               .filter(sub => subjectGroups[sub] === 'Group 2')
               .map((subName) => renderSubjectCard(subName))
           )}

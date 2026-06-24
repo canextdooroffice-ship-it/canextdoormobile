@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, Plus, Search, ExternalLink, Edit2, Trash2, Check, X, Link as LinkIcon, Tag } from 'lucide-react';
+import { CustomSelect } from './CustomSelect';
 
 interface LinkItem {
   id: string;
@@ -390,10 +391,9 @@ export const LinksManager: React.FC<LinksManagerProps> = ({ onBack }) => {
               <div className="form-group">
                 <label className="styled-form-label">Category</label>
                 <div className="category-selection-row">
-                  <select 
+                  <CustomSelect 
                     value={isCustomCategory ? 'Custom' : category}
-                    onChange={(e) => {
-                      const val = e.target.value;
+                    onChange={(val) => {
                       if (val === 'Custom') {
                         setIsCustomCategory(true);
                       } else {
@@ -401,13 +401,12 @@ export const LinksManager: React.FC<LinksManagerProps> = ({ onBack }) => {
                         setCategory(val);
                       }
                     }}
+                    options={[
+                      ...DEFAULT_CATEGORIES.map(c => ({ value: c, label: c })),
+                      { value: 'Custom', label: '+ Create Custom Category' }
+                    ]}
                     className="styled-form-select"
-                  >
-                    {DEFAULT_CATEGORIES.map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                    <option value="Custom">+ Create Custom Category</option>
-                  </select>
+                  />
                 </div>
               </div>
 

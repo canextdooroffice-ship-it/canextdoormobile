@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, Link as LinkIcon, Sparkles, Clock, Users } from 'lucide-react';
+import { ArrowLeft, Link as LinkIcon, Sparkles, Clock, Users, Calendar } from 'lucide-react';
 
 interface ToolsProps {
   onBack: () => void;
@@ -66,6 +66,21 @@ export const Tools: React.FC<ToolsProps> = ({ onBack, onOpenTool }) => {
             <h3 className="tool-card-title">Study Buddy & Groups</h3>
             <p className="tool-card-desc">
               Connect with friends using unique codes, coordinate study targets, and focus in Live Rooms.
+            </p>
+          </div>
+        </div>
+
+        <div 
+          className="tool-menu-card clickable"
+          onClick={() => onOpenTool('timeline')}
+        >
+          <div className="tool-card-icon-wrapper indigo animate-pulse-subtle">
+            <Calendar size={20} />
+          </div>
+          <div className="tool-card-info">
+            <h3 className="tool-card-title">Timeline</h3>
+            <p className="tool-card-desc">
+              Plan out your entire study timeline, set revision milestones, and track days remaining till exams.
             </p>
           </div>
         </div>
