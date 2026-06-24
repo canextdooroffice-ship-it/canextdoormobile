@@ -597,12 +597,13 @@ Three sections:
 - **Smart positioning:** Automatically detects viewport boundaries and opens upwards only when space below is tight (<200px) AND there is more available space above the trigger than below it, preventing clipping inside scrollable modal containers.
 - Used by Profile.tsx, Analytics.tsx, Subjects.tsx, Test.tsx, LinksManager.tsx, StudyBuddy.tsx, Dashboard.tsx, Planner.tsx, and Timeline.tsx (replacing native selects for full design consistency across student-facing features).
 
-### 6.16 `Timeline.tsx` (~711 lines)
+### 6.16 `Timeline.tsx` (~713 lines)
 - Study timeline planner and visual roadmap tracker.
 - Features target exam date configuration, countdown tracking, manual CRUD actions for customized phase milestones (title, start/end dates, status, notes, color theme).
 - Groups overlapping/same-period phases to display side-by-side.
 - Renders daily progress contribution blocks colored by past elapsed status and interactive manual completion toggles.
 - Uses `CustomSelect` for status select dropdown and circular picker for tag accent colors.
+- Uses `createPortal` to render Exam Date Picker and Phase Editor overlays directly to `document.body`, preventing bottom nav collision.
 - Persisted in localStorage key `cand_timeline_phases` and synced to Supabase backup.
 
 ---
@@ -807,7 +808,7 @@ SYLLABUS_DATA = {
 | `src/components/Test.tsx` | 72 KB | ~2,000 |
 | `src/components/AdminPanel.tsx` | 67 KB | ~1,800 |
 | `src/components/Planner.tsx` | 67 KB | ~1,800 |
-| `src/components/Timeline.tsx` | 27 KB | ~711 |
+| `src/components/Timeline.tsx` | 27 KB | ~713 |
 | `src/components/StudyBuddy.tsx` | 48 KB | ~1,200 |
 | `src/components/Analytics.tsx` | 42 KB | ~1,200 |
 | `src/components/Subjects.tsx` | 42 KB | ~1,070 |

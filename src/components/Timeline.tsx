@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   ArrowLeft, Calendar, Plus, Edit2, Trash2, CheckCircle, 
   Clock, AlertCircle, X, Info
@@ -535,7 +536,7 @@ export const Timeline: React.FC<TimelineProps> = ({
       </div>
 
       {/* MODAL 1: Exam Date Picker */}
-      {showDatePickerModal && (
+      {showDatePickerModal && createPortal(
         <div className="portal-modal-overlay">
           <div className="portal-modal-card fade-in">
             <div className="portal-modal-header">
@@ -583,11 +584,12 @@ export const Timeline: React.FC<TimelineProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* MODAL 2: Add/Edit Phase Editor */}
-      {showEditorModal && (
+      {showEditorModal && createPortal(
         <div className="portal-modal-overlay">
           <div className="portal-modal-card fade-in">
             <div className="portal-modal-header">
@@ -621,21 +623,21 @@ export const Timeline: React.FC<TimelineProps> = ({
                 <div className="planner-log-form-group flex-1">
                   <label className="planner-log-lbl">Start Date</label>
                   <input 
-                    type="date" 
-                    className="planner-log-input"
-                    value={phaseStart}
-                    onChange={(e) => setPhaseStart(e.target.value)}
-                    required
+                     type="date" 
+                     className="planner-log-input"
+                     value={phaseStart}
+                     onChange={(e) => setPhaseStart(e.target.value)}
+                     required
                   />
                 </div>
                 <div className="planner-log-form-group flex-1">
                   <label className="planner-log-lbl">End Date</label>
                   <input 
-                    type="date" 
-                    className="planner-log-input"
-                    value={phaseEnd}
-                    onChange={(e) => setPhaseEnd(e.target.value)}
-                    required
+                     type="date" 
+                     className="planner-log-input"
+                     value={phaseEnd}
+                     onChange={(e) => setPhaseEnd(e.target.value)}
+                     required
                   />
                 </div>
               </div>
@@ -703,7 +705,8 @@ export const Timeline: React.FC<TimelineProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
