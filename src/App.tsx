@@ -15,7 +15,7 @@ import { Test } from './components/Test';
 import { Tools } from './components/Tools';
 import { LinksManager } from './components/LinksManager';
 import { TimeManager } from './components/TimeManager';
-import { StudyBuddy } from './components/StudyBuddy';
+import { StudyBuddy, calculateWeightedProgress, calculateBuddyStatus } from './components/StudyBuddy';
 import { Timeline } from './components/Timeline';
 import type { TimelinePhase } from './components/Timeline';
 import type { TestRecord } from './components/Test';
@@ -207,6 +207,37 @@ function App() {
     loadFromStorage<string[]>('cand_deletedDefaultSubjects', [])
   );
   const [dynamicPapers, setDynamicPapers] = useState<MockTestPaper[]>([]);
+
+  // Buddies & users progress state lifted from StudyBuddy.tsx
+  const [buddies, setBuddies] = useState<any[]>(() => {
+    try {
+      const raw = localStorage.getItem('cand_study_buddies_v2');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [allUsersProgress, setAllUsersProgress] = useState<any[]>([]);
+
+  // Track if user was top contributor in each group
+  const [userWasTopInGroup, setUserWasTopInGroup] = useState<Record<string, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem('cand_userWasTopInGroup');
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('cand_study_buddies_v2', JSON.stringify(buddies));
+  }, [buddies]);
+
+  useEffect(() => {
+    localStorage.setItem('cand_userWasTopInGroup', JSON.stringify(userWasTopInGroup));
+  }, [userWasTopInGroup]);
+
   const isAdmin = useMemo(() => {
     if (!session?.user) return false;
     const email = session.user.email?.toLowerCase().trim() || '';
@@ -964,7 +995,263 @@ function App() {
     saveToStorage('cand_favourite_questions', favouriteQuestions);
   }, [favouriteQuestions]);
 
+  // Fetch all users' progress states (buddies, group members, self)
+  const fetchLatestAllUsersProgress = useCallback(async () => {
+    if (!session?.user?.id) return;
+    const userId = session.user.id;
 
+    try {
+      let query = supabase
+        .from('user_progress')
+        .select('user_id, full_name, email, progress_state, is_active, updated_at');
+
+      if (!isAdmin) {
+        const buddyIds = buddies.map((b: any) => b.id);
+        const targetUserIds = [userId, ...buddyIds].filter(Boolean);
+
+        const memberNames = new Set<string>();
+        groups.forEach((g: any) => {
+          if (Array.isArray(g.members)) {
+            g.members.forEach((m: string) => {
+              if (m && m !== 'You') {
+                memberNames.add(m);
+              }
+            });
+          }
+        });
+
+        if (memberNames.size > 0) {
+          const conditions = [`user_id.in.(${targetUserIds.join(',')})`];
+          memberNames.forEach(name => {
+            const safeName = name.replace(/,/g, '');
+            conditions.push(`full_name.ilike.${safeName}`);
+            conditions.push(`email.ilike.${safeName}`);
+          });
+          query = query.or(conditions.join(','));
+        } else {
+          query = query.in('user_id', targetUserIds);
+        }
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      if (data) {
+        setAllUsersProgress(data);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch user progress states in App:', err);
+    }
+  }, [session, isAdmin, buddies, groups]);
+
+  // Load and cache all users' progress states initially and when metadata lengths change
+  useEffect(() => {
+    if (session?.user?.id) {
+      fetchLatestAllUsersProgress();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id, buddies.length, groups.length]);
+
+  // Listen to realtime updates on user_progress table
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    const channel = supabase
+      .channel('app_user_progress_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'user_progress' },
+        (payload) => {
+          const newRow = payload.new as any;
+          if (newRow && newRow.user_id) {
+            setAllUsersProgress(prev => {
+              const idx = prev.findIndex(row => row.user_id === newRow.user_id);
+              if (idx !== -1) {
+                const updated = [...prev];
+                updated[idx] = newRow;
+                return updated;
+              } else {
+                return [...prev, newRow];
+              }
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session?.user?.id]);
+
+  // Synchronize buddies with allUsersProgress changes
+  useEffect(() => {
+    if (allUsersProgress.length === 0) return;
+    setBuddies(prev => prev.map(buddy => {
+      const match = allUsersProgress.find(row => row.user_id === buddy.id);
+      if (match) {
+        const name = match.full_name || match.email || buddy.name;
+        const completion = calculateWeightedProgress(match.progress_state, subjectGroups);
+        const status = calculateBuddyStatus(match.is_active, match.updated_at, match.progress_state);
+        const cloudState = match.progress_state;
+        let bTodayHours = 0;
+        if (cloudState && typeof cloudState === 'object' && 'todayHours' in cloudState) {
+          bTodayHours = (cloudState as any).todayHours || 0;
+        }
+        let bPreparingFor: 'Group 1' | 'Group 2' | 'Both Groups' = 'Both Groups';
+        if (cloudState && typeof cloudState === 'object' && 'preparingFor' in cloudState) {
+          bPreparingFor = (cloudState as any).preparingFor || 'Both Groups';
+        }
+        return {
+          ...buddy,
+          name,
+          completionPercentage: completion,
+          status,
+          todayHours: bTodayHours,
+          preparingFor: bPreparingFor
+        };
+      }
+      return buddy;
+    }));
+  }, [allUsersProgress, subjectGroups]);
+
+  // Helper: Construct complete group members list for checking top contributor status
+  const getGroupMembersForTopCheck = useCallback((group: any) => {
+    const dbMembers: any[] = [];
+    allUsersProgress.forEach(user => {
+      const pState = user.progress_state;
+      if (!pState) return;
+
+      let userGroups: any[] = [];
+      if (typeof pState === 'object') {
+        userGroups = pState.groups || pState.checklist?.groups || [];
+      }
+
+      const hasGroup = Array.isArray(userGroups) && userGroups.some((g: any) => g.code === group.code);
+      if (hasGroup) {
+        const completion = calculateWeightedProgress(pState, subjectGroups);
+        let uTodayHours = 0;
+        if (pState && typeof pState === 'object') {
+          uTodayHours = pState.todayHours || 0;
+        }
+
+        let uPreparingFor = 'Both Groups';
+        if (pState && typeof pState === 'object') {
+          uPreparingFor = pState.preparingFor || 'Both Groups';
+        }
+
+        dbMembers.push({
+          userId: user.user_id,
+          name: user.full_name || user.email || 'Study Buddy',
+          email: user.email || '',
+          todayHours: uTodayHours,
+          completionPercentage: completion,
+          preparingFor: uPreparingFor,
+          status: calculateBuddyStatus(user.is_active, user.updated_at, pState)
+        });
+      }
+    });
+
+    const finalMembers: {
+      name: string;
+      isSelf: boolean;
+      todayHours: number;
+    }[] = [];
+
+    const processedNames = new Set<string>();
+
+    dbMembers.forEach(m => {
+      const isSelfUser = m.userId === session?.user?.id;
+      const displayName = isSelfUser ? 'You' : m.name;
+      finalMembers.push({
+        name: displayName,
+        isSelf: isSelfUser,
+        todayHours: isSelfUser ? todayHours : m.todayHours
+      });
+      processedNames.add(displayName.toLowerCase());
+      processedNames.add(m.name.toLowerCase());
+    });
+
+    if (!processedNames.has('you')) {
+      finalMembers.push({
+        name: 'You',
+        isSelf: true,
+        todayHours: todayHours
+      });
+      processedNames.add('you');
+    }
+
+    if (Array.isArray(group.members)) {
+      group.members.forEach((memberName: string) => {
+        if (memberName === 'You') return;
+        const normalized = memberName.toLowerCase();
+        if (processedNames.has(normalized)) return;
+
+        const buddy = buddies.find(b => b.name.toLowerCase() === normalized);
+        if (buddy) {
+          finalMembers.push({
+            name: buddy.name,
+            isSelf: false,
+            todayHours: buddy.todayHours || 0
+          });
+        } else {
+          let hash = 0;
+          for (let i = 0; i < memberName.length; i++) {
+            hash = memberName.charCodeAt(i) + ((hash << 5) - hash);
+          }
+          const mockHours = (Math.abs(hash) % 4) + 1.5;
+          finalMembers.push({
+            name: memberName,
+            isSelf: false,
+            todayHours: parseFloat(mockHours.toFixed(1))
+          });
+        }
+        processedNames.add(normalized);
+      });
+    }
+
+    return finalMembers;
+  }, [allUsersProgress, subjectGroups, session?.user?.id, todayHours, buddies]);
+
+  // Effect to check top contributor status and trigger notification
+  useEffect(() => {
+    if (!session?.user?.id || groups.length === 0) return;
+
+    let updatedTopStatus = { ...userWasTopInGroup };
+    let statusChanged = false;
+
+    groups.forEach((group) => {
+      const members = getGroupMembersForTopCheck(group);
+      
+      const userMember = members.find(m => m.isSelf);
+      const otherMembers = members.filter(m => !m.isSelf);
+
+      if (otherMembers.length === 0) return;
+
+      const userHours = userMember ? userMember.todayHours : 0;
+      const maxOtherHours = otherMembers.reduce((max, m) => m.todayHours > max ? m.todayHours : max, 0);
+
+      const isUserTop = userHours > 0 && userHours >= maxOtherHours;
+      const wasUserTop = !!userWasTopInGroup[group.id];
+
+      if (isUserTop && !wasUserTop) {
+        const title = 'Top Contributor! 🥇';
+        const body = `You are now the top contributor of group "${group.name}" with ${userHours}h studied today!`;
+        
+        showLocalNotification(title, body);
+        showToast(body, 'success');
+        
+        updatedTopStatus[group.id] = true;
+        statusChanged = true;
+      } else if (!isUserTop && wasUserTop) {
+        updatedTopStatus[group.id] = false;
+        statusChanged = true;
+      }
+    });
+
+    if (statusChanged) {
+      setUserWasTopInGroup(updatedTopStatus);
+    }
+  }, [groups, todayHours, allUsersProgress, buddies, session?.user?.id, userWasTopInGroup, getGroupMembersForTopCheck, showLocalNotification, showToast]);
 
   // ---- Supabase cloud backup sync ----
   const syncTimerRef = useRef<number | null>(null);
@@ -1839,6 +2126,10 @@ function App() {
                 setGroups={setGroups}
                 preparingFor={preparingFor}
                 timerRunning={timerRunning}
+                buddies={buddies}
+                setBuddies={setBuddies}
+                allUsersProgress={allUsersProgress}
+                setAllUsersProgress={setAllUsersProgress}
               />
             )}
             {activeTab === 'timeline' && (

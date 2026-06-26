@@ -39,10 +39,14 @@ interface StudyBuddyProps {
   setGroups: React.Dispatch<React.SetStateAction<Group[]>>;
   preparingFor: 'Group 1' | 'Group 2' | 'Both Groups';
   timerRunning?: boolean;
+  buddies: Buddy[];
+  setBuddies: React.Dispatch<React.SetStateAction<Buddy[]>>;
+  allUsersProgress: any[];
+  setAllUsersProgress: React.Dispatch<React.SetStateAction<any[]>>;
 }
 
 // Helper: Calculate progress percentage based on unweighted average (only for Group 1/2 subjects)
-const calculateWeightedProgress = (progressState: any, fallbackSubjectGroups: any): number => {
+export const calculateWeightedProgress = (progressState: any, fallbackSubjectGroups: any): number => {
   if (!progressState) return 0;
 
   // Extract checklist and subjectGroups from the packed cloud state if present
@@ -90,7 +94,7 @@ const calculateWeightedProgress = (progressState: any, fallbackSubjectGroups: an
 };
 
 // Helper: Calculate buddy online/offline/studying status based on last sync updated_at
-const calculateBuddyStatus = (
+export const calculateBuddyStatus = (
   isActive: boolean,
   updatedAtStr: string | null,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -129,6 +133,10 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
   setGroups,
   preparingFor,
   timerRunning = false,
+  buddies,
+  setBuddies,
+  allUsersProgress,
+  setAllUsersProgress,
 }) => {
   // Generate deterministic share code
   const userShareCode = useMemo(() => {
@@ -149,18 +157,6 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
 
   // Tabs: 'buddies' | 'groups'
   const [activeTab, setActiveTab] = useState<'buddies' | 'groups'>('buddies');
-
-  // Friends / Buddies state
-  const [buddies, setBuddies] = useState<Buddy[]>(() => {
-    try {
-      const raw = localStorage.getItem('cand_study_buddies_v2');
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  const [allUsersProgress, setAllUsersProgress] = useState<any[]>([]);
 
   // Helper: Get members from Supabase who have joined the group code
   const getMembersForGroup = (groupCode: string) => {
@@ -356,11 +352,6 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
   // Study Room State
   const [activeStudyRoom, setActiveStudyRoom] = useState<Group | null>(null);
 
-  // Sync state to localStorage
-  useEffect(() => {
-    localStorage.setItem('cand_study_buddies_v2', JSON.stringify(buddies));
-  }, [buddies]);
-
   // Function to manually refresh buddies from Supabase with visual indicators
   const fetchLatestBuddiesInfo = async () => {
     setRefreshing(true);
@@ -447,87 +438,18 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
     }
   };
 
-  // Load and cache all users' progress states on mount
+  // On mount, randomize mock buddy statuses for visual flavor
   useEffect(() => {
-    const initFetch = async () => {
-      try {
-        let query = supabase
-          .from('user_progress')
-          .select('user_id, full_name, email, progress_state, is_active, updated_at');
-
-        if (!isAdmin) {
-          const buddyIds = buddies.map(b => b.id);
-          const targetUserIds = [userId, ...buddyIds].filter(Boolean);
-
-          const memberNames = new Set<string>();
-          groups.forEach(g => {
-            if (Array.isArray(g.members)) {
-              g.members.forEach(m => {
-                if (m && m !== 'You') {
-                  memberNames.add(m);
-                }
-              });
-            }
-          });
-
-          if (memberNames.size > 0) {
-            const conditions = [`user_id.in.(${targetUserIds.join(',')})`];
-            memberNames.forEach(name => {
-              const safeName = name.replace(/,/g, '');
-              conditions.push(`full_name.ilike.${safeName}`);
-              conditions.push(`email.ilike.${safeName}`);
-            });
-            query = query.or(conditions.join(','));
-          } else {
-            query = query.in('user_id', targetUserIds);
-          }
-        }
-
-        const { data, error } = await query;
-        if (error) throw error;
-        if (data) {
-          setAllUsersProgress(data);
-
-          // Silent update buddies using this data (and update mock buddies dynamically)
-          setBuddies(prev => prev.map(buddy => {
-            const match = data.find(row => row.user_id === buddy.id);
-            if (match) {
-              const name = match.full_name || match.email || buddy.name;
-              const completion = calculateWeightedProgress(match.progress_state, subjectGroups);
-              const status = calculateBuddyStatus(match.is_active, match.updated_at, match.progress_state);
-              const cloudState = match.progress_state;
-              let bTodayHours = 0;
-              if (cloudState && typeof cloudState === 'object' && 'todayHours' in cloudState) {
-                bTodayHours = (cloudState as any).todayHours || 0;
-              }
-              let bPreparingFor: 'Group 1' | 'Group 2' | 'Both Groups' = 'Both Groups';
-              if (cloudState && typeof cloudState === 'object' && 'preparingFor' in cloudState) {
-                bPreparingFor = (cloudState as any).preparingFor || 'Both Groups';
-              }
-              return {
-                ...buddy,
-                name,
-                completionPercentage: completion,
-                status,
-                todayHours: bTodayHours,
-                preparingFor: bPreparingFor
-              };
-            } else {
-              // Dynamic mock buddy status update on mount
-              const rand = Math.random();
-              const status = rand > 0.7 ? 'Studying' : (rand > 0.4 ? 'Online' : 'Offline');
-              return {
-                ...buddy,
-                status
-              };
-            }
-          }));
-        }
-      } catch (err) {
-        console.warn('Silent mount fetch failed:', err);
+    setBuddies(prev => prev.map(buddy => {
+      // If it's a real buddy (exists in allUsersProgress), keep it. Otherwise randomize.
+      const isReal = allUsersProgress.some(row => row.user_id === buddy.id);
+      if (!isReal) {
+        const rand = Math.random();
+        const status = rand > 0.7 ? 'Studying' : (rand > 0.4 ? 'Online' : 'Offline');
+        return { ...buddy, status };
       }
-    };
-    initFetch();
+      return buddy;
+    }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -602,57 +524,7 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, userId, subjectGroups, allUsersProgress]);
 
-  // Listen to realtime updates on user_progress table
-  useEffect(() => {
-    const channel = supabase
-      .channel('buddies_user_progress_realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'user_progress' },
-        (payload) => {
-          const newRow = payload.new as any;
-          if (newRow && newRow.user_id) {
-            // Update cached user progress list for study group calculation
-            setAllUsersProgress(prev => {
-              const idx = prev.findIndex(row => row.user_id === newRow.user_id);
-              if (idx !== -1) {
-                const updated = [...prev];
-                updated[idx] = newRow;
-                return updated;
-              } else {
-                return [...prev, newRow];
-              }
-            });
 
-            setBuddies(prev => prev.map(buddy => {
-              if (buddy.id === newRow.user_id) {
-                const name = newRow.full_name || newRow.email || buddy.name;
-                const completion = calculateWeightedProgress(newRow.progress_state, subjectGroups);
-                const status = calculateBuddyStatus(newRow.is_active, newRow.updated_at, newRow.progress_state);
-                const cloudState = newRow.progress_state;
-                let bTodayHours = 0;
-                if (cloudState && typeof cloudState === 'object' && 'todayHours' in cloudState) {
-                  bTodayHours = (cloudState as any).todayHours || 0;
-                }
-                return {
-                  ...buddy,
-                  name,
-                  completionPercentage: completion,
-                  status,
-                  todayHours: bTodayHours
-                };
-              }
-              return buddy;
-            }));
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [subjectGroups]);
 
   // Get members ranked by completion percentage
   const rankedMembers = useMemo(() => {

@@ -158,6 +158,9 @@ All state lives in `App.tsx` via `useState` hooks and is **props-drilled** to ch
 | `dynamicPapers` | MockTestPaper[] | Mock papers fetched from Supabase |
 | `globalSubjects` | any[] | Admin-managed subjects from Supabase |
 | `groups` | Group[] | Study groups joined/owned by the student |
+| `buddies` | Buddy[] | List of added study buddies (lifted from StudyBuddy.tsx) |
+| `allUsersProgress` | any[] | Local cache of all users' progress states (lifted from StudyBuddy.tsx) |
+| `userWasTopInGroup` | Record<string, boolean> | Map of group ID to top contributor status to prevent duplicate notifications |
 
 **Study Tracking:**
 | State | Type | Purpose |
@@ -827,7 +830,8 @@ SYLLABUS_DATA = {
 - `StudyBuddy` uses unweighted average completion percentages and only includes subjects that have an assigned group ('Group 1' or 'Group 2')
 - `StudyBuddy` validates group codes against all existing users' progress states in the database to prevent joining with random/fake codes
 - `calculateBuddyStatus` accepts a clock skew window (`diffMinutes >= -15 && diffMinutes < 8`) to handle minor discrepancies between client local system clocks and the database server clock without falsely showing offline users as online.
-- Non-admin database queries in `StudyBuddy.tsx` are optimized to only fetch own progress, added buddies, and group members to conserve bandwidth and DB memory.
+- Non-admin database queries are optimized to only fetch own progress, added buddies, and group members to conserve bandwidth and DB memory (now managed globally in `App.tsx`).
+- Top contributor notifications are sent globally in `App.tsx` when a student's `todayHours` exceeds or equals the hours of all other members in a study group. Local status changes are tracked via `userWasTopInGroup` state.
 
 ---
 
@@ -836,12 +840,12 @@ SYLLABUS_DATA = {
 | File | Size | Lines |
 |------|------|-------|
 | `src/index.css` | 252 KB | ~12,750 |
-| `src/App.tsx` | 84 KB | ~2,176 |
+| `src/App.tsx` | 92 KB | ~2,285 |
 | `src/components/Test.tsx` | 72 KB | ~2,000 |
 | `src/components/AdminPanel.tsx` | 67 KB | ~1,800 |
 | `src/components/Planner.tsx` | 67 KB | ~1,800 |
 | `src/components/Timeline.tsx` | 27 KB | ~713 |
-| `src/components/StudyBuddy.tsx` | 60 KB | ~1,464 |
+| `src/components/StudyBuddy.tsx` | 57 KB | ~1,276 |
 | `src/components/Analytics.tsx` | 42 KB | ~1,200 |
 | `src/components/Subjects.tsx` | 42 KB | ~1,070 |
 | `src/components/Dashboard.tsx` | 39 KB | ~1,100 |

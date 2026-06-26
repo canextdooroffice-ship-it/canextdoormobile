@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ca-next-door-v20260626T175118541Z';
+const CACHE_NAME = 'ca-next-door-v20260626T180815033Z';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
