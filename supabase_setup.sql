@@ -25,16 +25,16 @@ ALTER TABLE user_progress ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRU
 ALTER TABLE user_progress ENABLE ROW LEVEL SECURITY;
 
 -- Drop existing policies if we are re-running to avoid errors
-DROP POLICY IF EXISTS "Users can view own progress" ON user_progress;
+DROP POLICY IF EXISTS "Users can view all progress" ON user_progress;
 DROP POLICY IF EXISTS "Users can insert own progress" ON user_progress;
 DROP POLICY IF EXISTS "Users can update own progress" ON user_progress;
 DROP POLICY IF EXISTS "Admins can view all user progress" ON user_progress;
 DROP POLICY IF EXISTS "Admins can update all user progress" ON user_progress;
 
 -- User Policies
-CREATE POLICY "Users can view own progress"
+CREATE POLICY "Users can view all progress"
   ON user_progress FOR SELECT
-  USING (auth.uid() = user_id);
+  USING (true);
 
 CREATE POLICY "Users can insert own progress"
   ON user_progress FOR INSERT

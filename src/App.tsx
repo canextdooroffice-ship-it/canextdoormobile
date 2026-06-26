@@ -203,6 +203,9 @@ function App() {
   );
   const [tests, setTests] = useState<TestRecord[]>(() => loadFromStorage<TestRecord[]>('cand_tests', []));
   const [favouriteQuestions, setFavouriteQuestions] = useState<any[]>(() => loadFromStorage<any[]>('cand_favourite_questions', []));
+  const [deletedDefaultSubjects, setDeletedDefaultSubjects] = useState<string[]>(() =>
+    loadFromStorage<string[]>('cand_deletedDefaultSubjects', [])
+  );
   const [dynamicPapers, setDynamicPapers] = useState<MockTestPaper[]>([]);
   const isAdmin = useMemo(() => {
     if (!session?.user) return false;
@@ -526,6 +529,9 @@ function App() {
 
           // Add missing default subjects or default chapters
           Object.entries(levelSyllabus).forEach(([subName, chapters]) => {
+            if (deletedDefaultSubjects.includes(subName)) {
+              return; // Skip restoring deleted subjects
+            }
             if (!updated[subName]) {
               updated[subName] = {};
             }
@@ -622,10 +628,14 @@ function App() {
         }
       }
     }
-  }, [caLevel, progressState]);
+  }, [caLevel, progressState, deletedDefaultSubjects]);
   const [fullName, setFullName] = useState<string>(() => loadFromStorage(LS_KEYS.FULL_NAME, ''));
   const [examStartDate, setExamStartDate] = useState<string>(() => loadFromStorage(LS_KEYS.EXAM_START_DATE, ''));
   const [timelinePhases, setTimelinePhases] = useState<TimelinePhase[]>(() => loadFromStorage('cand_timeline_phases', []));
+  const [groups, setGroups] = useState<any[]>(() => loadFromStorage('cand_study_groups_v2', []));
+  useEffect(() => {
+    saveToStorage('cand_study_groups_v2', groups);
+  }, [groups]);
   const [preparingFor, setPreparingFor] = useState<'Group 1' | 'Group 2' | 'Both Groups'>(() => {
     try {
       const val = localStorage.getItem('cand_preparingFor');
@@ -845,12 +855,16 @@ function App() {
   const [timerPreset, setTimerPreset] = useState<'25' | '50' | '5'>('25');
   const [timerStudyLabel, setTimerStudyLabel] = useState('');
   const timerIntervalRef = useRef<number | null>(null);
+  const [heartbeat, setHeartbeat] = useState(0);
 
   // Timer interval — lives at App level so it never unmounts
   useEffect(() => {
     if (timerRunning) {
       timerIntervalRef.current = window.setInterval(() => {
         setTimerTimeLeft((prev) => {
+          if (prev % 120 === 0) {
+            setHeartbeat((h) => h + 1);
+          }
           if (prev <= 1) {
             setTimerRunning(false);
             if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
@@ -957,10 +971,10 @@ function App() {
   const hasSyncedRef = useRef(false); // prevent double-load on mount
 
   // Ref to always hold the latest state values for loadCloudData callbacks without stale closure issues
-  const stateRef = useRef({ progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, favouriteQuestions, timelinePhases });
+  const stateRef = useRef({ progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, favouriteQuestions, timelinePhases, groups });
   useEffect(() => {
-    stateRef.current = { progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, favouriteQuestions, timelinePhases };
-  }, [progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, favouriteQuestions, timelinePhases]);
+    stateRef.current = { progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, favouriteQuestions, timelinePhases, groups };
+  }, [progressState, caLevel, studyTarget, totalHours, slots, tasks, revisions, mistakes, fullName, examStartDate, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, favouriteQuestions, timelinePhases, groups]);
 
   // Load cloud data on login (restores progress on new device)
   const loadCloudData = useCallback(async (userId: string, email: string) => {
@@ -982,7 +996,8 @@ function App() {
             'cand_schedule_slots', 'cand_planner_tasks', 'cand_revisions', 'cand_mistakes',
             'cand_streakCount', 'cand_checkedInToday', 'cand_checkInHistory', 'cand_studyHistory',
             'cand_wakeHistory', 'cand_sleepHistory', 'cand_studyLogs', 'cand_lastCheckInDate',
-            'cand_subjectGroups', 'cand_preparingFor', 'cand_tests', 'cand_timeline_phases'
+            'cand_subjectGroups', 'cand_preparingFor', 'cand_tests', 'cand_timeline_phases',
+            'cand_study_groups_v2'
           ];
           keys.forEach(k => localStorage.removeItem(k));
           
@@ -1018,6 +1033,8 @@ function App() {
             favouriteQuestions?: any[];
             streakMigrated?: boolean;
             timelinePhases?: TimelinePhase[];
+            deletedDefaultSubjects?: string[];
+            groups?: any[];
           };
           setProgressState(packed.checklist || {});
           setTasks(packed.tasks || []);
@@ -1026,6 +1043,13 @@ function App() {
           setSlots(packed.slots || []);
           setTests(packed.tests || []);
           setFavouriteQuestions(packed.favouriteQuestions || []);
+          if (packed.deletedDefaultSubjects) {
+            setDeletedDefaultSubjects(packed.deletedDefaultSubjects);
+            localStorage.setItem('cand_deletedDefaultSubjects', JSON.stringify(packed.deletedDefaultSubjects));
+          } else {
+            setDeletedDefaultSubjects([]);
+            localStorage.removeItem('cand_deletedDefaultSubjects');
+          }
           if (packed.fullName) setFullName(packed.fullName);
           if (packed.examStartDate) setExamStartDate(packed.examStartDate);
           if (packed.timelinePhases) setTimelinePhases(packed.timelinePhases);
@@ -1066,6 +1090,10 @@ function App() {
           if (packed.todayHours !== undefined) {
             setTodayHours(packed.todayHours);
             localStorage.setItem('cand_todayHours', JSON.stringify(packed.todayHours));
+          }
+          if (packed.groups) {
+            setGroups(packed.groups);
+            localStorage.setItem('cand_study_groups_v2', JSON.stringify(packed.groups));
           }
         } else {
           // Old format (just progressState)
@@ -1114,6 +1142,8 @@ function App() {
         setStudyLogs([]);
         setSubjectGroups({});
         setPreparingFor('Both Groups');
+        setDeletedDefaultSubjects([]);
+        setGroups([]);
 
         localStorage.removeItem(LS_KEYS.PROGRESS);
         localStorage.removeItem(LS_KEYS.TOTAL_HOURS);
@@ -1131,6 +1161,8 @@ function App() {
         localStorage.removeItem('cand_subjectGroups');
         localStorage.removeItem('cand_preparingFor');
         localStorage.removeItem('cand_tests');
+        localStorage.removeItem('cand_deletedDefaultSubjects');
+        localStorage.removeItem('cand_study_groups_v2');
 
         // Pack clean state for Supabase
         const packedProgress = {
@@ -1152,7 +1184,9 @@ function App() {
           subjectGroups: {},
           preparingFor: 'Both Groups',
           tests: [],
-          streakMigrated: true
+          streakMigrated: true,
+          deletedDefaultSubjects: [],
+          groups: []
         };
 
         await saveToSupabase(userId, {
@@ -1199,7 +1233,10 @@ function App() {
         tests,
         favouriteQuestions,
         streakMigrated: true,
-        timelinePhases
+        timelinePhases,
+        deletedDefaultSubjects,
+        groups,
+        timerRunning
       };
 
       saveToSupabase(userId, {
@@ -1215,7 +1252,7 @@ function App() {
     return () => {
       if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     };
-  }, [progressState, caLevel, studyTarget, totalHours, fullName, examStartDate, tasks, revisions, mistakes, slots, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, favouriteQuestions, session, timelinePhases]);
+  }, [progressState, caLevel, studyTarget, totalHours, fullName, examStartDate, tasks, revisions, mistakes, slots, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, favouriteQuestions, session, timelinePhases, deletedDefaultSubjects, groups, timerRunning, heartbeat]);
 
   // Listen for service worker update events from main.tsx
   useEffect(() => {
@@ -1580,6 +1617,12 @@ function App() {
   };
 
   const handleAddSubject = (subName: string, group: 'Group 1' | 'Group 2' | null) => {
+    setDeletedDefaultSubjects((prev) => {
+      const next = prev.filter((name) => name !== subName);
+      saveToStorage('cand_deletedDefaultSubjects', next);
+      return next;
+    });
+
     setProgressState((prev) => {
       if (prev[subName]) return prev;
       return {
@@ -1600,6 +1643,18 @@ function App() {
   };
 
   const handleDeleteSubject = (subName: string) => {
+    const levelSyllabus = SYLLABUS_DATA[caLevel as keyof typeof SYLLABUS_DATA];
+    if (levelSyllabus && levelSyllabus[subName as keyof typeof levelSyllabus] !== undefined) {
+      setDeletedDefaultSubjects((prev) => {
+        const next = [...prev];
+        if (!next.includes(subName)) {
+          next.push(subName);
+        }
+        saveToStorage('cand_deletedDefaultSubjects', next);
+        return next;
+      });
+    }
+
     setProgressState((prev) => {
       const newState = { ...prev };
       delete newState[subName];
@@ -1681,6 +1736,8 @@ function App() {
     setPreparingFor('Both Groups');
     setTests([]);
     setTimelinePhases([]);
+    setDeletedDefaultSubjects([]);
+    setGroups([]);
 
     localStorage.removeItem(LS_KEYS.CA_LEVEL);
     localStorage.removeItem(LS_KEYS.STUDY_TARGET);
@@ -1706,6 +1763,8 @@ function App() {
     localStorage.removeItem('cand_preparingFor');
     localStorage.removeItem('cand_tests');
     localStorage.removeItem('cand_timeline_phases');
+    localStorage.removeItem('cand_deletedDefaultSubjects');
+    localStorage.removeItem('cand_study_groups_v2');
   };
 
   const handleLogout = () => {
@@ -1775,6 +1834,11 @@ function App() {
                 subjectGroups={subjectGroups}
                 onBack={() => setActiveTab('tools')}
                 isAdmin={isAdmin}
+                todayHours={todayHours}
+                groups={groups}
+                setGroups={setGroups}
+                preparingFor={preparingFor}
+                timerRunning={timerRunning}
               />
             )}
             {activeTab === 'timeline' && (

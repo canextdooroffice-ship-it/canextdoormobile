@@ -10,6 +10,8 @@ interface Buddy {
   code: string;
   status: 'Online' | 'Offline' | 'Studying';
   completionPercentage: number;
+  todayHours?: number;
+  preparingFor?: 'Group 1' | 'Group 2' | 'Both Groups';
 }
 
 interface Group {
@@ -21,6 +23,7 @@ interface Group {
   currentHours: number;
   members: string[];
   owner: string;
+  ownerId?: string;
 }
 
 interface StudyBuddyProps {
@@ -31,9 +34,14 @@ interface StudyBuddyProps {
   subjectGroups: Record<string, 'Group 1' | 'Group 2'>;
   onBack: () => void;
   isAdmin?: boolean;
+  todayHours: number;
+  groups: Group[];
+  setGroups: React.Dispatch<React.SetStateAction<Group[]>>;
+  preparingFor: 'Group 1' | 'Group 2' | 'Both Groups';
+  timerRunning?: boolean;
 }
 
-// Helper: Calculate progress percentage based on 3 criteria weighted score
+// Helper: Calculate progress percentage based on unweighted average (only for Group 1/2 subjects)
 const calculateWeightedProgress = (progressState: any, fallbackSubjectGroups: any): number => {
   if (!progressState) return 0;
 
@@ -44,10 +52,16 @@ const calculateWeightedProgress = (progressState: any, fallbackSubjectGroups: an
   const subjects = Object.keys(actualProgress);
   if (subjects.length === 0) return 0;
 
-  let totalWeightedPoints = 0;
-  let totalWeight = 0;
+  let totalPercentage = 0;
+  let count = 0;
 
   subjects.forEach(subName => {
+    // Only include subjects that have an assigned group ('Group 1' or 'Group 2')
+    const group = actualSubjectGroups ? actualSubjectGroups[subName] : null;
+    if (group !== 'Group 1' && group !== 'Group 2') {
+      return; // Ignore this subject completely
+    }
+
     const chaptersObj = actualProgress[subName];
     if (!chaptersObj) return;
 
@@ -67,21 +81,39 @@ const calculateWeightedProgress = (progressState: any, fallbackSubjectGroups: an
 
     const subProgress = totalPoints > 0 ? (completedPoints / totalPoints) : 0;
 
-    // Determine weight
-    let weight = 1.0;
-    if (actualSubjectGroups) {
-      const group = actualSubjectGroups[subName];
-      if (group === 'Group 1' || group === 'Group 2') {
-        weight = 1.5;
-      }
-    }
-
-    totalWeightedPoints += subProgress * weight;
-    totalWeight += weight;
+    totalPercentage += subProgress * 100;
+    count++;
   });
 
-  if (totalWeight === 0) return 0;
-  return Math.round((totalWeightedPoints / totalWeight) * 100);
+  if (count === 0) return 0;
+  return Math.round(totalPercentage / count);
+};
+
+// Helper: Calculate buddy online/offline/studying status based on last sync updated_at
+const calculateBuddyStatus = (
+  isActive: boolean,
+  updatedAtStr: string | null,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  progressState: any
+): 'Online' | 'Offline' | 'Studying' => {
+  if (!isActive) return 'Offline';
+  if (!updatedAtStr) return 'Offline';
+
+  const lastSync = new Date(updatedAtStr).getTime();
+  const now = Date.now();
+  const diffMinutes = (now - lastSync) / 60000;
+
+  // Accept clock skew: if the client's clock is behind the server clock (negative diffMinutes),
+  // allow up to 15 minutes of skew. Anything further in the future or older than 8 minutes is Offline.
+  if (diffMinutes >= -15 && diffMinutes < 8) {
+    const actualState = progressState?.checklist ? progressState : progressState;
+    const isTimerRunning =
+      actualState &&
+      typeof actualState === 'object' &&
+      (actualState.timerRunning === true || actualState.checklist?.timerRunning === true);
+    return isTimerRunning ? 'Studying' : 'Online';
+  }
+  return 'Offline';
 };
 
 export const StudyBuddy: React.FC<StudyBuddyProps> = ({
@@ -92,6 +124,11 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
   subjectGroups,
   onBack,
   isAdmin = false,
+  todayHours,
+  groups,
+  setGroups,
+  preparingFor,
+  timerRunning = false,
 }) => {
   // Generate deterministic share code
   const userShareCode = useMemo(() => {
@@ -123,15 +160,156 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
     }
   });
 
-  // Groups state
-  const [groups, setGroups] = useState<Group[]>(() => {
-    try {
-      const raw = localStorage.getItem('cand_study_groups_v2');
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
+  const [allUsersProgress, setAllUsersProgress] = useState<any[]>([]);
+
+  // Helper: Get members from Supabase who have joined the group code
+  const getMembersForGroup = (groupCode: string) => {
+    const members: {
+      userId: string;
+      name: string;
+      email: string;
+      todayHours: number;
+      completionPercentage: number;
+      preparingFor: 'Group 1' | 'Group 2' | 'Both Groups';
+      status: 'Online' | 'Offline' | 'Studying';
+    }[] = [];
+
+    allUsersProgress.forEach(user => {
+      const progressState = user.progress_state;
+      if (!progressState) return;
+
+      let userGroups: any[] = [];
+      if (typeof progressState === 'object') {
+        userGroups = (progressState as any).groups || (progressState as any).checklist?.groups || [];
+      }
+
+      const hasGroup = Array.isArray(userGroups) && userGroups.some((g: any) => g.code === groupCode);
+      if (hasGroup) {
+        const completion = calculateWeightedProgress(progressState, subjectGroups);
+
+        const cloudState = progressState;
+        let uTodayHours = 0;
+        if (cloudState && typeof cloudState === 'object') {
+          if ('todayHours' in cloudState) {
+            uTodayHours = (cloudState as any).todayHours || 0;
+          }
+        }
+
+        let uPreparingFor: 'Group 1' | 'Group 2' | 'Both Groups' = 'Both Groups';
+        if (cloudState && typeof cloudState === 'object') {
+          if ('preparingFor' in cloudState) {
+            uPreparingFor = (cloudState as any).preparingFor || 'Both Groups';
+          }
+        }
+
+        members.push({
+          userId: user.user_id,
+          name: user.full_name || user.email || 'Study Buddy',
+          email: user.email || '',
+          todayHours: uTodayHours,
+          completionPercentage: completion,
+          preparingFor: uPreparingFor,
+          status: calculateBuddyStatus(user.is_active, user.updated_at, user.progress_state)
+        });
+      }
+    });
+
+    return members;
+  };
+
+  // Helper: Construct complete group members list (combining DB and local/invited members)
+  const getGroupMembers = (group: Group) => {
+    const dbMembers = getMembersForGroup(group.code);
+    const finalMembers: {
+      name: string;
+      isSelf: boolean;
+      todayHours: number;
+      completionPercentage: number;
+      preparingFor: 'Group 1' | 'Group 2' | 'Both Groups';
+      status: 'Online' | 'Offline' | 'Studying';
+    }[] = [];
+
+    const processedNames = new Set<string>();
+
+    dbMembers.forEach(m => {
+      const isSelfUser = m.userId === userId;
+      const displayName = isSelfUser ? 'You' : m.name;
+      finalMembers.push({
+        name: displayName,
+        isSelf: isSelfUser,
+        todayHours: isSelfUser ? todayHours : m.todayHours,
+        completionPercentage: isSelfUser ? userCompletionPercentage : m.completionPercentage,
+        preparingFor: isSelfUser ? preparingFor : m.preparingFor,
+        status: isSelfUser ? (timerRunning ? 'Studying' : 'Online') : m.status
+      });
+      processedNames.add(displayName.toLowerCase());
+      processedNames.add(m.name.toLowerCase());
+    });
+
+    if (!processedNames.has('you') && !processedNames.has('you (you)')) {
+      finalMembers.push({
+        name: 'You',
+        isSelf: true,
+        todayHours: todayHours,
+        completionPercentage: userCompletionPercentage,
+        preparingFor: preparingFor,
+        status: timerRunning ? 'Studying' : 'Online'
+      });
+      processedNames.add('you');
     }
-  });
+
+    if (Array.isArray(group.members)) {
+      group.members.forEach(memberName => {
+        if (memberName === 'You') return;
+        const normalized = memberName.toLowerCase();
+        if (processedNames.has(normalized)) return;
+
+        const buddy = buddies.find(b => b.name.toLowerCase() === normalized);
+        if (buddy) {
+          finalMembers.push({
+            name: buddy.name,
+            isSelf: false,
+            todayHours: buddy.todayHours || 0,
+            completionPercentage: buddy.completionPercentage,
+            preparingFor: buddy.preparingFor || 'Both Groups',
+            status: buddy.status
+          });
+        } else {
+          let hash = 0;
+          for (let i = 0; i < memberName.length; i++) {
+            hash = memberName.charCodeAt(i) + ((hash << 5) - hash);
+          }
+          const mockHours = (Math.abs(hash) % 4) + 1.5;
+          const mockProgress = 30 + (Math.abs(hash) % 61);
+          const mockPreparingFor: ('Group 1' | 'Group 2' | 'Both Groups')[] = ['Group 1', 'Group 2', 'Both Groups'];
+          
+          finalMembers.push({
+            name: memberName,
+            isSelf: false,
+            todayHours: parseFloat(mockHours.toFixed(1)),
+            completionPercentage: mockProgress,
+            preparingFor: mockPreparingFor[Math.abs(hash) % 3],
+            status: 'Offline'
+          });
+        }
+        processedNames.add(normalized);
+      });
+    }
+
+    return finalMembers;
+  };
+
+  // Dynamically calculate group's current study hours
+  const getGroupCurrentHours = (group: Group) => {
+    const members = getGroupMembers(group);
+    const total = members.reduce((sum, m) => sum + m.todayHours, 0);
+    return parseFloat(total.toFixed(1));
+  };
+
+  // Dynamically calculate group's member count
+  const getGroupMemberCount = (group: Group) => {
+    return getGroupMembers(group).length;
+  };
 
   // Action / Form states
   const [buddyCodeInput, setBuddyCodeInput] = useState('');
@@ -139,8 +317,19 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
   const [toast, setToast] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Helper: Show toast notification
+  const showToastMsg = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
+
+
   // Local state for buddy search
   const [buddySearchQuery, setBuddySearchQuery] = useState('');
+
+  // Leaderboard filter state (Group 1, Group 2, Both Groups, All)
+  const [leaderboardFilter, setLeaderboardFilter] = useState<'All' | 'Group 1' | 'Group 2' | 'Both Groups'>('All');
+
 
   // Memoized filtered buddies list
   const filteredBuddiesList = useMemo(() => {
@@ -172,49 +361,84 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
     localStorage.setItem('cand_study_buddies_v2', JSON.stringify(buddies));
   }, [buddies]);
 
-  useEffect(() => {
-    localStorage.setItem('cand_study_groups_v2', JSON.stringify(groups));
-  }, [groups]);
-
   // Function to manually refresh buddies from Supabase with visual indicators
   const fetchLatestBuddiesInfo = async () => {
-    const actualUserIds = buddies.filter(b => b.id.includes('-')).map(b => b.id);
-    if (actualUserIds.length === 0) {
-      showToastMsg('No actual users to refresh!');
-      return;
-    }
-
     setRefreshing(true);
     showToastMsg('Refreshing buddies progress...');
 
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('user_progress')
-        .select('user_id, full_name, email, progress_state, is_active')
-        .in('user_id', actualUserIds);
+        .select('user_id, full_name, email, progress_state, is_active, updated_at');
+
+      if (!isAdmin) {
+        const buddyIds = buddies.map(b => b.id);
+        const targetUserIds = [userId, ...buddyIds].filter(Boolean);
+
+        const memberNames = new Set<string>();
+        groups.forEach(g => {
+          if (Array.isArray(g.members)) {
+            g.members.forEach(m => {
+              if (m && m !== 'You') {
+                memberNames.add(m);
+              }
+            });
+          }
+        });
+
+        if (memberNames.size > 0) {
+          const conditions = [`user_id.in.(${targetUserIds.join(',')})`];
+          memberNames.forEach(name => {
+            const safeName = name.replace(/,/g, '');
+            conditions.push(`full_name.ilike.${safeName}`);
+            conditions.push(`email.ilike.${safeName}`);
+          });
+          query = query.or(conditions.join(','));
+        } else {
+          query = query.in('user_id', targetUserIds);
+        }
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
-      if (data && data.length > 0) {
-        setBuddies(prev => prev.map(buddy => {
-          const match = data.find(row => row.user_id === buddy.id);
-          if (match) {
-            const name = match.full_name || match.email || buddy.name;
-            const completion = calculateWeightedProgress(match.progress_state, subjectGroups);
-            const status = match.is_active ? 'Online' : 'Offline';
-            return {
-              ...buddy,
-              name,
-              completionPercentage: completion,
-              status
-            };
+      const fetchedData = data || [];
+      setAllUsersProgress(fetchedData);
+      setBuddies(prev => prev.map(buddy => {
+        const match = fetchedData.find(row => row.user_id === buddy.id);
+        if (match) {
+          const name = match.full_name || match.email || buddy.name;
+          const completion = calculateWeightedProgress(match.progress_state, subjectGroups);
+          const status = calculateBuddyStatus(match.is_active, match.updated_at, match.progress_state);
+          const cloudState = match.progress_state;
+          let bTodayHours = 0;
+          if (cloudState && typeof cloudState === 'object' && 'todayHours' in cloudState) {
+            bTodayHours = (cloudState as any).todayHours || 0;
           }
-          return buddy;
-        }));
-        showToastMsg('Buddies progress updated! 🔄');
-      } else {
-        showToastMsg('All buddies are up to date! 🤝');
-      }
+          let bPreparingFor: 'Group 1' | 'Group 2' | 'Both Groups' = 'Both Groups';
+          if (cloudState && typeof cloudState === 'object' && 'preparingFor' in cloudState) {
+            bPreparingFor = (cloudState as any).preparingFor || 'Both Groups';
+          }
+          return {
+            ...buddy,
+            name,
+            completionPercentage: completion,
+            status,
+            todayHours: bTodayHours,
+            preparingFor: bPreparingFor
+          };
+        } else {
+          // Dynamic mock buddy status update on refresh
+          const rand = Math.random();
+          const status = rand > 0.7 ? 'Studying' : (rand > 0.4 ? 'Online' : 'Offline');
+          return {
+            ...buddy,
+            status
+          };
+        }
+      }));
+      showToastMsg('Buddies progress updated! 🔄');
     } catch (err) {
       console.warn('Failed to update buddies from Supabase:', err);
       showToastMsg('Refresh failed. Try again.');
@@ -223,119 +447,160 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
     }
   };
 
-  // Update buddies progress and status silently from Supabase on mount
+  // Load and cache all users' progress states on mount
   useEffect(() => {
-    const actualUserIds = buddies.filter(b => b.id.includes('-')).map(b => b.id);
-    if (actualUserIds.length > 0) {
-      const silentFetch = async () => {
-        try {
-          const { data, error } = await supabase
-            .from('user_progress')
-            .select('user_id, full_name, email, progress_state, is_active')
-            .in('user_id', actualUserIds);
+    const initFetch = async () => {
+      try {
+        let query = supabase
+          .from('user_progress')
+          .select('user_id, full_name, email, progress_state, is_active, updated_at');
 
-          if (error) throw error;
+        if (!isAdmin) {
+          const buddyIds = buddies.map(b => b.id);
+          const targetUserIds = [userId, ...buddyIds].filter(Boolean);
 
-          if (data && data.length > 0) {
-            setBuddies(prev => prev.map(buddy => {
-              const match = data.find(row => row.user_id === buddy.id);
-              if (match) {
-                const name = match.full_name || match.email || buddy.name;
-                const completion = calculateWeightedProgress(match.progress_state, subjectGroups);
-                const status = match.is_active ? 'Online' : 'Offline';
-                return {
-                  ...buddy,
-                  name,
-                  completionPercentage: completion,
-                  status
-                };
-              }
-              return buddy;
-            }));
+          const memberNames = new Set<string>();
+          groups.forEach(g => {
+            if (Array.isArray(g.members)) {
+              g.members.forEach(m => {
+                if (m && m !== 'You') {
+                  memberNames.add(m);
+                }
+              });
+            }
+          });
+
+          if (memberNames.size > 0) {
+            const conditions = [`user_id.in.(${targetUserIds.join(',')})`];
+            memberNames.forEach(name => {
+              const safeName = name.replace(/,/g, '');
+              conditions.push(`full_name.ilike.${safeName}`);
+              conditions.push(`email.ilike.${safeName}`);
+            });
+            query = query.or(conditions.join(','));
+          } else {
+            query = query.in('user_id', targetUserIds);
           }
-        } catch (err) {
-          console.warn('Silent mount fetch failed:', err);
         }
-      };
-      silentFetch();
-    }
+
+        const { data, error } = await query;
+        if (error) throw error;
+        if (data) {
+          setAllUsersProgress(data);
+
+          // Silent update buddies using this data (and update mock buddies dynamically)
+          setBuddies(prev => prev.map(buddy => {
+            const match = data.find(row => row.user_id === buddy.id);
+            if (match) {
+              const name = match.full_name || match.email || buddy.name;
+              const completion = calculateWeightedProgress(match.progress_state, subjectGroups);
+              const status = calculateBuddyStatus(match.is_active, match.updated_at, match.progress_state);
+              const cloudState = match.progress_state;
+              let bTodayHours = 0;
+              if (cloudState && typeof cloudState === 'object' && 'todayHours' in cloudState) {
+                bTodayHours = (cloudState as any).todayHours || 0;
+              }
+              let bPreparingFor: 'Group 1' | 'Group 2' | 'Both Groups' = 'Both Groups';
+              if (cloudState && typeof cloudState === 'object' && 'preparingFor' in cloudState) {
+                bPreparingFor = (cloudState as any).preparingFor || 'Both Groups';
+              }
+              return {
+                ...buddy,
+                name,
+                completionPercentage: completion,
+                status,
+                todayHours: bTodayHours,
+                preparingFor: bPreparingFor
+              };
+            } else {
+              // Dynamic mock buddy status update on mount
+              const rand = Math.random();
+              const status = rand > 0.7 ? 'Studying' : (rand > 0.4 ? 'Online' : 'Offline');
+              return {
+                ...buddy,
+                status
+              };
+            }
+          }));
+        }
+      } catch (err) {
+        console.warn('Silent mount fetch failed:', err);
+      }
+    };
+    initFetch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Auto-add all active users if the current user is an admin
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!isAdmin || allUsersProgress.length === 0) return;
 
-    const fetchAllActiveUsers = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('user_progress')
-          .select('user_id, full_name, email, progress_state, is_active')
-          .eq('is_active', true);
+    setBuddies(prev => {
+      const existingIds = new Set(prev.map(b => b.id));
+      const newBuddies: Buddy[] = [];
+      const updatedBuddiesMap = new Map(prev.map(b => [b.id, b]));
 
-        if (error) throw error;
+      allUsersProgress.forEach(row => {
+        // Skip the admin's own ID
+        if (row.user_id === userId) return;
 
-        if (data && data.length > 0) {
-          setBuddies(prev => {
-            const existingIds = new Set(prev.map(b => b.id));
-            const newBuddies: Buddy[] = [];
-            const updatedBuddiesMap = new Map(prev.map(b => [b.id, b]));
+        const completion = calculateWeightedProgress(row.progress_state, subjectGroups);
+        const name = row.full_name || row.email || 'Study Buddy';
+        const status = calculateBuddyStatus(row.is_active, row.updated_at, row.progress_state);
+        const cloudState = row.progress_state;
+        let bTodayHours = 0;
+        if (cloudState && typeof cloudState === 'object' && 'todayHours' in cloudState) {
+          bTodayHours = (cloudState as any).todayHours || 0;
+        }
+        let bPreparingFor: 'Group 1' | 'Group 2' | 'Both Groups' = 'Both Groups';
+        if (cloudState && typeof cloudState === 'object' && 'preparingFor' in cloudState) {
+          bPreparingFor = (cloudState as any).preparingFor || 'Both Groups';
+        }
 
-            data.forEach(row => {
-              // Skip the admin's own ID
-              if (row.user_id === userId) return;
+        let baseCode = 'STUDENT';
+        if (row.full_name) {
+          baseCode = row.full_name.replace(/\s+/g, '').substring(0, 4).toUpperCase();
+        } else if (row.email) {
+          baseCode = row.email.split('@')[0].substring(0, 4).toUpperCase();
+        }
+        const suffix = row.user_id ? row.user_id.substring(row.user_id.length - 4).toUpperCase() : '2026';
+        const code = `CA-${baseCode}${suffix}`;
 
-              const completion = calculateWeightedProgress(row.progress_state, subjectGroups);
-              const name = row.full_name || row.email || 'Study Buddy';
-              const status = row.is_active ? 'Online' : 'Offline';
-
-              let baseCode = 'STUDENT';
-              if (row.full_name) {
-                baseCode = row.full_name.replace(/\s+/g, '').substring(0, 4).toUpperCase();
-              } else if (row.email) {
-                baseCode = row.email.split('@')[0].substring(0, 4).toUpperCase();
-              }
-              const suffix = row.user_id ? row.user_id.substring(row.user_id.length - 4).toUpperCase() : '2026';
-              const code = `CA-${baseCode}${suffix}`;
-
-              if (existingIds.has(row.user_id)) {
-                // Update properties of existing buddy
-                const existing = updatedBuddiesMap.get(row.user_id);
-                if (existing) {
-                  updatedBuddiesMap.set(row.user_id, {
-                    ...existing,
-                    name,
-                    completionPercentage: completion,
-                    status
-                  });
-                }
-              } else {
-                newBuddies.push({
-                  id: row.user_id,
-                  name,
-                  code,
-                  status,
-                  completionPercentage: completion
-                });
-              }
+        if (existingIds.has(row.user_id)) {
+          // Update properties of existing buddy
+          const existing = updatedBuddiesMap.get(row.user_id);
+          if (existing) {
+            updatedBuddiesMap.set(row.user_id, {
+              ...existing,
+              name,
+              completionPercentage: completion,
+              status,
+              todayHours: bTodayHours,
+              preparingFor: bPreparingFor
             });
-
-            if (newBuddies.length > 0) {
-              showToastMsg(`Automatically added ${newBuddies.length} active users as buddies! 🤝`);
-            }
-
-            const updatedExisting = prev.map(b => updatedBuddiesMap.get(b.id) || b);
-            return [...newBuddies, ...updatedExisting];
+          }
+        } else {
+          newBuddies.push({
+            id: row.user_id,
+            name,
+            code,
+            status,
+            completionPercentage: completion,
+            todayHours: bTodayHours,
+            preparingFor: bPreparingFor
           });
         }
-      } catch (err) {
-        console.warn('Failed to auto-add active users for admin:', err);
-      }
-    };
+      });
 
-    fetchAllActiveUsers();
+      if (newBuddies.length > 0) {
+        setTimeout(() => showToastMsg(`Automatically added ${newBuddies.length} active users as buddies! 🤝`), 0);
+      }
+
+      const updatedExisting = prev.map(b => updatedBuddiesMap.get(b.id) || b);
+      return [...newBuddies, ...updatedExisting];
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin, userId, subjectGroups]);
+  }, [isAdmin, userId, subjectGroups, allUsersProgress]);
 
   // Listen to realtime updates on user_progress table
   useEffect(() => {
@@ -347,16 +612,34 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
         (payload) => {
           const newRow = payload.new as any;
           if (newRow && newRow.user_id) {
+            // Update cached user progress list for study group calculation
+            setAllUsersProgress(prev => {
+              const idx = prev.findIndex(row => row.user_id === newRow.user_id);
+              if (idx !== -1) {
+                const updated = [...prev];
+                updated[idx] = newRow;
+                return updated;
+              } else {
+                return [...prev, newRow];
+              }
+            });
+
             setBuddies(prev => prev.map(buddy => {
               if (buddy.id === newRow.user_id) {
                 const name = newRow.full_name || newRow.email || buddy.name;
                 const completion = calculateWeightedProgress(newRow.progress_state, subjectGroups);
-                const status = newRow.is_active ? 'Online' : 'Offline';
+                const status = calculateBuddyStatus(newRow.is_active, newRow.updated_at, newRow.progress_state);
+                const cloudState = newRow.progress_state;
+                let bTodayHours = 0;
+                if (cloudState && typeof cloudState === 'object' && 'todayHours' in cloudState) {
+                  bTodayHours = (cloudState as any).todayHours || 0;
+                }
                 return {
                   ...buddy,
                   name,
                   completionPercentage: completion,
-                  status
+                  status,
+                  todayHours: bTodayHours
                 };
               }
               return buddy;
@@ -375,49 +658,21 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
   const rankedMembers = useMemo(() => {
     if (!activeStudyRoom) return [];
     
-    return activeStudyRoom.members.map(memberName => {
-      let score = 0;
-      if (memberName === 'You') {
-        score = userCompletionPercentage;
-      } else {
-        // Look up in buddies
-        const buddy = buddies.find(b => b.name === memberName);
-        if (buddy) {
-          score = buddy.completionPercentage;
-        } else {
-          // Deterministic fallback based on name character codes
-          let hash = 0;
-          for (let i = 0; i < memberName.length; i++) {
-            hash = memberName.charCodeAt(i) + ((hash << 5) - hash);
-          }
-          score = 30 + (Math.abs(hash) % 61); // 30% to 90%
-        }
-      }
-      
-      // Look up status if buddy
-      let status: 'Online' | 'Offline' | 'Studying' = 'Online';
-      if (memberName === 'You') {
-        status = 'Online';
-      } else {
-        const buddy = buddies.find(b => b.name === memberName);
-        if (buddy) {
-          status = buddy.status;
-        }
-      }
+    let members = getGroupMembers(activeStudyRoom);
+    if (leaderboardFilter !== 'All') {
+      members = members.filter(m => m.preparingFor === leaderboardFilter);
+    }
+    
+    return members.map(m => ({
+      name: m.name,
+      score: m.completionPercentage,
+      status: m.status,
+      preparingFor: m.preparingFor,
+      todayHours: m.todayHours
+    })).sort((a, b) => b.score - a.score);
+  }, [activeStudyRoom, allUsersProgress, buddies, userCompletionPercentage, preparingFor, todayHours, leaderboardFilter]);
 
-      return {
-        name: memberName,
-        score,
-        status
-      };
-    }).sort((a, b) => b.score - a.score);
-  }, [activeStudyRoom, buddies, userCompletionPercentage]);
 
-  // Helper: Show toast notification
-  const showToastMsg = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3000);
-  };
 
   // Copy Code to Clipboard
   const handleCopyCode = () => {
@@ -453,6 +708,8 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
     let resolvedId = '';
     let resolvedProgress = 0;
     let resolvedStatus: 'Online' | 'Offline' | 'Studying' = 'Online';
+    let resolvedTodayHours = 0;
+    let resolvedPreparingFor: 'Group 1' | 'Group 2' | 'Both Groups' = 'Both Groups';
     let isActualUser = false;
 
     showToastMsg('Searching for buddy on server...');
@@ -462,7 +719,7 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
         // Query database
         const { data, error } = await supabase
           .from('user_progress')
-          .select('user_id, full_name, email, progress_state, is_active')
+          .select('user_id, full_name, email, progress_state, is_active, updated_at')
           .or(`full_name.ilike.${base}%,email.ilike.${base}%`);
 
         if (error) throw error;
@@ -478,7 +735,14 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
             resolvedId = match.user_id;
             resolvedName = match.full_name || match.email || 'Study Buddy';
             resolvedProgress = calculateWeightedProgress(match.progress_state, subjectGroups);
-            resolvedStatus = match.is_active ? 'Online' : 'Offline';
+            resolvedStatus = calculateBuddyStatus(match.is_active, match.updated_at, match.progress_state);
+            const cloudState = match.progress_state;
+            if (cloudState && typeof cloudState === 'object' && 'todayHours' in cloudState) {
+              resolvedTodayHours = (cloudState as any).todayHours || 0;
+            }
+            if (cloudState && typeof cloudState === 'object' && 'preparingFor' in cloudState) {
+              resolvedPreparingFor = (cloudState as any).preparingFor || 'Both Groups';
+            }
             isActualUser = true;
           }
         }
@@ -501,7 +765,12 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
         : 'Study Buddy');
       resolvedId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 9);
       resolvedProgress = Math.floor(Math.random() * 71) + 25;
-      resolvedStatus = Math.random() > 0.4 ? 'Studying' : 'Online';
+      const rand = Math.random();
+      resolvedStatus = rand > 0.7 ? 'Studying' : (rand > 0.4 ? 'Online' : 'Offline');
+      resolvedTodayHours = parseFloat((Math.random() * 4 + 1.5).toFixed(1));
+      
+      const preparingForOptions: ('Group 1' | 'Group 2' | 'Both Groups')[] = ['Group 1', 'Group 2', 'Both Groups'];
+      resolvedPreparingFor = preparingForOptions[base.length % 3];
       
       showToastMsg(`Buddy code not found on server. Added mock buddy: ${resolvedName}! 🤝`);
     } else {
@@ -513,7 +782,9 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
       name: resolvedName,
       code: cleanCode,
       status: resolvedStatus,
-      completionPercentage: resolvedProgress
+      completionPercentage: resolvedProgress,
+      todayHours: resolvedTodayHours,
+      preparingFor: resolvedPreparingFor
     };
 
     setBuddies(prev => [newBuddy, ...prev]);
@@ -535,7 +806,8 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
 
     if (!name) return;
 
-    const code = 'GRP-' + name.replace(/\s+/g, '').substring(0, 8).toUpperCase();
+    const randomSuffix = Math.floor(Math.random() * 900 + 100);
+    const code = 'GRP-' + name.replace(/\s+/g, '').substring(0, 8).toUpperCase() + randomSuffix;
     const newGroup: Group = {
       id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 9),
       name,
@@ -544,7 +816,8 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
       targetHours: target,
       currentHours: 0,
       members: ['You'],
-      owner: 'You'
+      owner: userFullName || 'Study Buddy',
+      ownerId: userId
     };
 
     setGroups(prev => [newGroup, ...prev]);
@@ -564,34 +837,48 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
     // Check if already in group
     const existingGroup = groups.find(g => g.code === code);
     if (existingGroup) {
-      if (existingGroup.members.includes('You')) {
-        showToastMsg('You are already a member of this group!');
-        return;
-      }
-      // Join existing group
-      setGroups(prev => prev.map(g => 
-        g.code === code 
-          ? { ...g, memberCount: g.memberCount + 1, members: [...g.members, 'You'] }
-          : g
-      ));
-      showToastMsg(`Joined group: ${existingGroup.name}! 🚀`);
-    } else {
-      // Simulate creating a mock group matching the code entered
-      const mockGroupName = code.startsWith('GRP-') ? code.substring(4) : code;
-      const newGroup: Group = {
-        id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 9),
-        name: `${mockGroupName} Club 📚`,
-        code,
-        memberCount: Math.floor(Math.random() * 4) + 2,
-        targetHours: 24,
-        currentHours: 12.5,
-        members: ['Chitransh Agrawal', 'Ananya Sharma', 'You'],
-        owner: 'Chitransh Agrawal'
-      };
-      setGroups(prev => [newGroup, ...prev]);
-      showToastMsg(`Joined group: ${newGroup.name}! 🚀`);
+      showToastMsg('You are already a member of this group!');
+      return;
     }
 
+    // Verify code on server
+    let foundGroupInDb: any = null;
+    for (const user of allUsersProgress) {
+      const progressState = user.progress_state;
+      if (!progressState) continue;
+      let userGroups: any[] = [];
+      if (typeof progressState === 'object') {
+        userGroups = (progressState as any).groups || (progressState as any).checklist?.groups || [];
+      }
+      if (Array.isArray(userGroups)) {
+        const match = userGroups.find((g: any) => g.code === code);
+        if (match) {
+          foundGroupInDb = match;
+          break;
+        }
+      }
+    }
+
+    if (!foundGroupInDb) {
+      showToastMsg('Group code not found on server! Please check the code.');
+      return;
+    }
+
+    // Join the group by copying its details
+    const newGroup: Group = {
+      id: foundGroupInDb.id || (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 9)),
+      name: foundGroupInDb.name,
+      code: foundGroupInDb.code,
+      memberCount: (foundGroupInDb.memberCount || 1) + 1,
+      targetHours: foundGroupInDb.targetHours || 24,
+      currentHours: foundGroupInDb.currentHours || 0,
+      members: Array.isArray(foundGroupInDb.members) ? [...foundGroupInDb.members, 'You'] : ['You'],
+      owner: foundGroupInDb.owner || 'Study Buddy',
+      ownerId: foundGroupInDb.ownerId || foundGroupInDb.owner
+    };
+
+    setGroups(prev => [newGroup, ...prev]);
+    showToastMsg(`Joined group: ${newGroup.name}! 🚀`);
     setGroupCodeInput('');
     setIsJoinGroupOpen(false);
   };
@@ -612,7 +899,6 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
       const foundBuddy = buddies.find(b => b.code === code);
       if (foundBuddy) {
         memberName = foundBuddy.name;
-        isActualUser = true;
       } else {
         // Query Supabase for this member
         const withoutPrefix = code.replace('CA-', '');
@@ -664,7 +950,8 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
 
     if (!memberName) return;
 
-    if (isAddMemberOpen.members.includes(memberName)) {
+    const currentMembers = getGroupMembers(isAddMemberOpen).map(m => m.name.toLowerCase());
+    if (currentMembers.includes(memberName.toLowerCase())) {
       showToastMsg(`${memberName} is already a member of this group!`);
       return;
     }
@@ -672,7 +959,7 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
     // Add to group
     setGroups(prev => prev.map(g => 
       g.id === isAddMemberOpen.id 
-        ? { ...g, memberCount: g.memberCount + 1, members: [...g.members, memberName] }
+        ? { ...g, members: [...g.members, memberName] }
         : g
     ));
 
@@ -680,7 +967,6 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
     if (activeStudyRoom && activeStudyRoom.id === isAddMemberOpen.id) {
       setActiveStudyRoom(prev => prev ? {
         ...prev,
-        memberCount: prev.memberCount + 1,
         members: [...prev.members, memberName]
       } : null);
     }
@@ -696,6 +982,7 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
     setGroups(prev => prev.filter(g => g.id !== id));
     if (activeStudyRoom && activeStudyRoom.id === id) {
       setActiveStudyRoom(null);
+      setLeaderboardFilter('All');
     }
     showToastMsg(isOwner ? `Deleted group: ${name}` : `Left group: ${name}`);
   };
@@ -714,7 +1001,7 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
         <button 
           type="button" 
           className="study-buddy-back-btn" 
-          onClick={activeStudyRoom ? () => setActiveStudyRoom(null) : onBack}
+          onClick={activeStudyRoom ? () => { setActiveStudyRoom(null); setLeaderboardFilter('All'); } : onBack}
           aria-label="Back"
         >
           <ArrowLeft size={16} />
@@ -742,26 +1029,15 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
           <div className="room-info-card" style={{ background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(6, 182, 212, 0.1))', color: 'var(--text-primary)', border: '1.5px solid var(--border-color)', boxShadow: 'none' }}>
             <span className="room-badge" style={{ backgroundColor: 'var(--accent-primary)', color: 'white' }}>GROUP LEADERBOARD</span>
             <h3 className="room-title">{activeStudyRoom.name}</h3>
-            <p className="room-desc" style={{ color: 'var(--text-secondary)' }}>Ranking members based on their weighted completion score across Group 1, Group 2, and No Group subjects.</p>
+            <p className="room-desc" style={{ color: 'var(--text-secondary)' }}>Ranking members based on their average completion percentage across Group 1 and Group 2 subjects.</p>
           </div>
 
-          {/* Weighting Legend Info Box */}
-          <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '12px 14px', borderRadius: '16px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <span style={{ fontSize: '9px', fontWeight: 800, color: 'var(--text-secondary)', letterSpacing: '0.8px', textTransform: 'uppercase' }}>Weighted Score Criteria</span>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)' }}>
-              <span>Group 1 & 2 Subjects</span>
-              <span style={{ fontWeight: 700, color: 'var(--accent-primary)' }}>Weight 1.5</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)' }}>
-              <span>No Group Subjects</span>
-              <span style={{ fontWeight: 700, color: 'var(--text-secondary)' }}>Weight 1.0</span>
-            </div>
-          </div>
+
 
           {/* Members active in room grid */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', marginTop: '8px' }}>
             <h4 className="room-section-title" style={{ margin: 0 }}>Leaderboard Standing</h4>
-            {activeStudyRoom.owner === 'You' && (
+            {activeStudyRoom.ownerId === userId && (
               <button
                 type="button"
                 onClick={() => setIsAddMemberOpen(activeStudyRoom)}
@@ -782,6 +1058,28 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
               </button>
             )}
           </div>
+
+          {/* Group-wise Bifurcation Toggles */}
+          <div className="study-buddy-tabs" style={{ marginBottom: '12px', marginTop: '6px' }}>
+            {(['All', 'Group 1', 'Group 2', 'Both Groups'] as const).map(filterOpt => (
+              <button 
+                key={filterOpt}
+                type="button"
+                className={`tab-btn ${leaderboardFilter === filterOpt ? 'active' : ''}`}
+                onClick={() => setLeaderboardFilter(filterOpt)}
+                style={{ 
+                  fontSize: '11px', 
+                  padding: '6px 2px',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}
+              >
+                {filterOpt}
+              </button>
+            ))}
+          </div>
+
           <div className="room-members-grid" style={{ gap: '12px' }}>
             {rankedMembers.map((member, index) => {
               const isSelf = member.name === 'You';
@@ -804,9 +1102,24 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
                       <span className={`status-dot ${member.status === 'Studying' ? 'studying' : member.status === 'Online' ? 'online' : 'offline'}`} />
                     </div>
                     <div className="member-info" style={{ marginLeft: '6px', display: 'flex', flexDirection: 'column' }}>
-                      <span className="member-name" style={{ fontWeight: isSelf ? 800 : 700, fontSize: '13px', color: 'var(--text-primary)' }}>{member.name} {isSelf && '(You)'}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                        <span className="member-name" style={{ fontWeight: isSelf ? 800 : 700, fontSize: '13px', color: 'var(--text-primary)' }}>{member.name} {isSelf && '(You)'}</span>
+                        {member.preparingFor && (
+                          <span className={`preparing-badge ${member.preparingFor.toLowerCase().replace(' ', '-')}`} style={{
+                            fontSize: '8px',
+                            fontWeight: 800,
+                            padding: '1px 4px',
+                            borderRadius: '4px',
+                            backgroundColor: member.preparingFor === 'Group 1' ? 'rgba(99, 102, 241, 0.15)' : member.preparingFor === 'Group 2' ? 'rgba(14, 165, 233, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                            color: member.preparingFor === 'Group 1' ? 'var(--accent-primary)' : member.preparingFor === 'Group 2' ? 'var(--accent-secondary)' : 'var(--accent-green)'
+                          }}>
+                            {member.preparingFor}
+                          </span>
+                        )}
+                      </div>
                       <span className="member-activity" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                         {member.status === 'Studying' ? 'Studying right now' : member.status === 'Online' ? 'Online' : 'Offline'}
+                        {typeof member.todayHours === 'number' && ` • ${member.todayHours}h today`}
                       </span>
                     </div>
                   </div>
@@ -819,6 +1132,11 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
                 </div>
               );
             })}
+            {rankedMembers.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text-muted)', fontSize: '13px' }}>
+                No members found preparing for {leaderboardFilter}.
+              </div>
+            )}
           </div>
         </div>
       ) : (
@@ -912,7 +1230,21 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
                           </div>
                           <div className="buddy-details">
                             <span className="buddy-name">{buddy.name}</span>
-                            <span className="buddy-code-tag">{buddy.code}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '2px' }}>
+                              <span className="buddy-code-tag">{buddy.code}</span>
+                              {buddy.preparingFor && (
+                                <span className={`preparing-badge ${buddy.preparingFor.toLowerCase().replace(' ', '-')}`} style={{
+                                  fontSize: '9px',
+                                  fontWeight: 700,
+                                  padding: '1px 5px',
+                                  borderRadius: '6px',
+                                  backgroundColor: buddy.preparingFor === 'Group 1' ? 'rgba(99, 102, 241, 0.15)' : buddy.preparingFor === 'Group 2' ? 'rgba(14, 165, 233, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                                  color: buddy.preparingFor === 'Group 1' ? 'var(--accent-primary)' : buddy.preparingFor === 'Group 2' ? 'var(--accent-secondary)' : 'var(--accent-green)'
+                                }}>
+                                  {buddy.preparingFor}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                         <div className="buddy-card-right" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -966,7 +1298,10 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
                   </div>
                 ) : (
                   groups.map(group => {
-                    const ratio = Math.min(100, Math.round((group.currentHours / group.targetHours) * 100));
+                    const groupCurrentHours = getGroupCurrentHours(group);
+                    const memberCount = getGroupMemberCount(group);
+                    const ratio = Math.min(100, Math.round((groupCurrentHours / group.targetHours) * 100));
+                    const isOwner = group.ownerId === userId || group.owner === 'You';
                     return (
                       <div key={group.id} className="group-card">
                         <div className="group-card-header-row">
@@ -974,20 +1309,20 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
                             <span className="group-title">{group.name}</span>
                             <span className="group-code-badge">Code: {group.code}</span>
                             <span className="group-owner-badge" style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
-                              {group.owner === 'You' ? '👑 Owner: You' : `👤 Owner: ${group.owner}`}
+                              {isOwner ? '👑 Owner: You' : `👤 Owner: ${group.owner}`}
                             </span>
                           </div>
                           <div className="group-meta" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <span className="members-count">
                               <Users size={12} />
-                              {group.memberCount} members
+                              {memberCount} members
                             </span>
                             <button
                               type="button"
-                              onClick={() => handleDeleteGroup(group.id, group.name, group.owner === 'You')}
+                              onClick={() => handleDeleteGroup(group.id, group.name, isOwner)}
                               className="buddy-action-btn remove"
                               style={{ padding: '4px', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                              title={group.owner === 'You' ? "Delete Group" : "Leave Group"}
+                              title={isOwner ? "Delete Group" : "Leave Group"}
                             >
                               <X size={15} />
                             </button>
@@ -998,7 +1333,7 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
                         <div className="group-progress-section">
                           <div className="progress-labels">
                             <span>Today's Study Progress</span>
-                            <span>{group.currentHours}h / {group.targetHours}h</span>
+                            <span>{groupCurrentHours}h / {group.targetHours}h</span>
                           </div>
                           <div className="group-progress-bar-bg">
                             <div className="group-progress-bar-fill" style={{ width: `${ratio}%` }} />
@@ -1009,14 +1344,17 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
                         <div className="group-card-actions" style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
                           <button 
                             type="button" 
-                            onClick={() => setActiveStudyRoom(group)}
+                            onClick={() => {
+                              setActiveStudyRoom(group);
+                              setLeaderboardFilter('All');
+                            }}
                             className="group-join-room-btn"
                             style={{ flex: 1 }}
                           >
                             <Users size={12} />
                             <span>View Leaderboard</span>
                           </button>
-                          {group.owner === 'You' && (
+                          {isOwner && (
                             <button
                               type="button"
                               onClick={() => setIsAddMemberOpen(group)}
@@ -1138,24 +1476,27 @@ export const StudyBuddy: React.FC<StudyBuddyProps> = ({
                     <form onSubmit={handleAddMemberToGroup} className="buddy-modal-form">
                       <div className="form-group">
                         <label>Select from Study Buddies</label>
-                        {buddies.filter(b => !isAddMemberOpen.members.includes(b.name)).length === 0 ? (
-                          <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '4px 0' }}>No eligible buddies to add. All your buddies are already in this group, or you have no buddies added.</p>
-                        ) : (
-                          <CustomSelect
-                            value={selectedBuddyToAdd}
-                            onChange={(val) => {
-                              setSelectedBuddyToAdd(val);
-                              if (val) setManualMemberCode(''); // Clear manual input
-                            }}
-                            options={[
-                              { value: '', label: '-- Choose a Buddy --' },
-                              ...buddies
-                                .filter(b => !isAddMemberOpen.members.includes(b.name))
-                                .map(b => ({ value: b.name, label: `${b.name} (${b.code})` }))
-                            ]}
-                            className="styled-buddy-input"
-                          />
-                        )}
+                        {(() => {
+                          const currentMembers = getGroupMembers(isAddMemberOpen).map(m => m.name.toLowerCase());
+                          const eligibleBuddies = buddies.filter(b => !currentMembers.includes(b.name.toLowerCase()));
+                          if (eligibleBuddies.length === 0) {
+                            return <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '4px 0' }}>No eligible buddies to add. All your buddies are already in this group, or you have no buddies added.</p>;
+                          }
+                          return (
+                            <CustomSelect
+                              value={selectedBuddyToAdd}
+                              onChange={(val) => {
+                                setSelectedBuddyToAdd(val);
+                                if (val) setManualMemberCode(''); // Clear manual input
+                              }}
+                              options={[
+                                { value: '', label: '-- Choose a Buddy --' },
+                                ...eligibleBuddies.map(b => ({ value: b.name, label: `${b.name} (${b.code})` }))
+                              ]}
+                              className="styled-buddy-input"
+                            />
+                          );
+                        })()}
                       </div>
                       
                       <div style={{ textAlign: 'center', fontSize: '11px', color: 'var(--text-muted)', fontWeight: 700, margin: '4px 0' }}>— OR —</div>

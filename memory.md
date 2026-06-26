@@ -154,8 +154,10 @@ All state lives in `App.tsx` via `useState` hooks and is **props-drilled** to ch
 | `progressState` | ProgressState | **THE MAIN DATA STRUCTURE** — nested map of all subjects/chapters |
 | `tests` | TestRecord[] | Test attempt results |
 | `favouriteQuestions` | any[] | Bookmarked test questions |
+| `deletedDefaultSubjects` | string[] | Student-deleted global/default subjects list |
 | `dynamicPapers` | MockTestPaper[] | Mock papers fetched from Supabase |
 | `globalSubjects` | any[] | Admin-managed subjects from Supabase |
+| `groups` | Group[] | Study groups joined/owned by the student |
 
 **Study Tracking:**
 | State | Type | Purpose |
@@ -285,6 +287,30 @@ interface TimelinePhase {
   color: string; // 'indigo' | 'sky' | 'amber' | 'emerald' | 'rose'
   notes?: string;
 }
+
+// Study Buddy — imported from ./components/StudyBuddy
+interface Buddy {
+  id: string;
+  name: string;
+  code: string;
+  status: 'Online' | 'Offline' | 'Studying';
+  completionPercentage: number;
+  todayHours?: number;
+  preparingFor?: 'Group 1' | 'Group 2' | 'Both Groups';
+}
+
+interface Group {
+  id: string;
+  name: string;
+  code: string;
+  memberCount: number;
+  targetHours: number;
+  currentHours: number;
+  members: string[];
+  owner: string;
+  ownerId?: string;
+}
+
 ```
 
 ### 4.4 Data Persistence — Dual Layer
@@ -312,7 +338,8 @@ const LS_KEYS = {
 // Plus: cand_studyHistory, cand_wakeHistory, cand_sleepHistory,
 // cand_studyLogs, cand_checkInHistory, cand_subjectGroups,
 // cand_preparingFor, cand_tests, cand_favourite_questions,
-// cand_darkMode, cand_lastCheckInDate, cand_streak_migrated_v1
+// cand_darkMode, cand_lastCheckInDate, cand_streak_migrated_v1,
+// cand_deletedDefaultSubjects
 // Profile keys: cand_courseName, cand_attemptMonthYear, etc.
 // Study Buddy: cand_study_buddies_v2, cand_study_groups_v2
 // Links Manager: cand_links_manager_links
@@ -367,7 +394,7 @@ REALTIME SUBSCRIPTIONS:
 | `is_active` | BOOLEAN (default true) | Account active status (admin-only) |
 | `updated_at` | TIMESTAMPTZ | Last sync timestamp |
 
-**RLS:** Users SELECT/INSERT/UPDATE own row. Admins SELECT/UPDATE all rows.
+**RLS:** Authenticated users can SELECT all rows. Users can INSERT/UPDATE own row. Admins can SELECT/UPDATE all rows.
 
 #### `mock_papers`
 | Column | Type | Description |
@@ -532,17 +559,18 @@ Three sections:
 2. **Mock Paper Management:** CRUD for `mock_papers`. Question editor (MCQ options + correct answer + explanation). Import/Export JSON. Set marks, time limits.
 3. **User Management:** View all users with stats. Activate/deactivate (`is_active`). View individual progress. Export to Excel (xlsx).
 
-### 6.9 `StudyBuddy.tsx` (~1200 lines)
+### 6.9 `StudyBuddy.tsx` (~1391 lines)
 - **Buddy system:** Add buddies via deterministic share codes (`CA-{NAME}{ID}`)
 - **Search bar:** Filter buddies by name or buddy code.
 - **Admin features:** If `isAdmin` is true, automatically queries all active users from Supabase and merges them into the study buddy list on mount.
-- **Groups:** Create (`GRP-` codes), Join, Add members, Delete/Leave
-- **Leaderboard:** Ranks members by weighted completion (1.5× for Group 1/2 subjects)
-- **Weighted progress formula:** Each chapter = 4 points max (1 classDone + 3 revisionCycles)
-- **Realtime:** Supabase subscription on `user_progress` for live buddy status
-- **Resolves buddy codes by querying `user_progress` table
-- **Modal sheets via `createPortal`
-- **Persisted in localStorage (`cand_study_buddies_v2`, `cand_study_groups_v2`)
+- **Groups:** Create (`GRP-` + random suffix codes), Join, Add members, Delete/Leave. Lifed to `App.tsx` and backed up serverlessly in `progress_state.groups`.
+- **Study progress:** Dynamically calculates group progress and `currentHours` on-the-fly by querying all users' progress backups who joined the group code.
+- **Leaderboard:** Ranks members by unweighted average completion percentage (ignores subjects with no group assigned and only calculates for subjects in Group 1 or Group 2).
+- **Categorization Badges:** Shows student CA exam preparation categories (Group 1 / Group 2 / Both Groups) next to their names on buddy cards and leaderboard standings.
+- **Realtime:** Supabase subscription on `user_progress` for live buddy status.
+- **Resolves buddy codes by querying `user_progress` table.
+- **Modal sheets via `createPortal`.
+- **Persisted in localStorage (`cand_study_buddies_v2`, `cand_study_groups_v2` via App.tsx).
 
 ### 6.10 `TimeManager.tsx` (~323 lines)
 - **NOT a timer** — it's a time allocation ANALYSIS tool
@@ -796,6 +824,10 @@ SYLLABUS_DATA = {
 - The "packed" format with `checklist` key is the NEW format; old format (just progressState) is still supported for backwards compat in `loadCloudData`
 - `StudyBuddy` queries OTHER users' `user_progress` rows — RLS must allow this (admin policies or special logic)
 - `TimeManager` is NOT a timer — it's analytics. The actual timer is the Pomodoro system in `App.tsx`/`Planner.tsx`
+- `StudyBuddy` uses unweighted average completion percentages and only includes subjects that have an assigned group ('Group 1' or 'Group 2')
+- `StudyBuddy` validates group codes against all existing users' progress states in the database to prevent joining with random/fake codes
+- `calculateBuddyStatus` accepts a clock skew window (`diffMinutes >= -15 && diffMinutes < 8`) to handle minor discrepancies between client local system clocks and the database server clock without falsely showing offline users as online.
+- Non-admin database queries in `StudyBuddy.tsx` are optimized to only fetch own progress, added buddies, and group members to conserve bandwidth and DB memory.
 
 ---
 
@@ -804,12 +836,12 @@ SYLLABUS_DATA = {
 | File | Size | Lines |
 |------|------|-------|
 | `src/index.css` | 252 KB | ~12,750 |
-| `src/App.tsx` | 80 KB | ~2,110 |
+| `src/App.tsx` | 84 KB | ~2,176 |
 | `src/components/Test.tsx` | 72 KB | ~2,000 |
 | `src/components/AdminPanel.tsx` | 67 KB | ~1,800 |
 | `src/components/Planner.tsx` | 67 KB | ~1,800 |
 | `src/components/Timeline.tsx` | 27 KB | ~713 |
-| `src/components/StudyBuddy.tsx` | 48 KB | ~1,200 |
+| `src/components/StudyBuddy.tsx` | 60 KB | ~1,464 |
 | `src/components/Analytics.tsx` | 42 KB | ~1,200 |
 | `src/components/Subjects.tsx` | 42 KB | ~1,070 |
 | `src/components/Dashboard.tsx` | 39 KB | ~1,100 |
