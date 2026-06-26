@@ -74,7 +74,7 @@ CA Next Door PWA Mobile/
 │   │   ├── Analytics.tsx         # Revision tracker & mistake journal (~42KB)
 │   │   ├── Auth.tsx              # Login/Signup with email+password (~10KB)
 │   │   ├── BottomNav.tsx         # Bottom tab navigation bar (~1.4KB)
-│   │   ├── CustomSelect.tsx      # Reusable dropdown select component (~2KB)
+│   │   ├── CustomSelect.tsx      # Reusable dropdown select component (~4KB)
 │   │   ├── Dashboard.tsx         # Main dashboard: stats, schedule, check-in (~39KB)
 │   │   ├── LinksManager.tsx      # Save/manage study resource links by category (~16KB)
 │   │   ├── Planner.tsx           # Study planner: calendar, logs, timer UI (~67KB)
@@ -621,12 +621,15 @@ Three sections:
 - Active tab dot indicator
 - Icons: Home, BookOpen, Calendar, BarChart2, User, Shield
 
-### 6.15 `CustomSelect.tsx` (~90 lines)
+### 6.15 `CustomSelect.tsx` (~145 lines)
 - Reusable styled dropdown replacing native `<select>`
 - Supports `string[]` or `{value, label}[]` options
-- Click-to-open popover, overlay for outside-click dismiss
-- **Smart positioning:** Automatically detects viewport boundaries and opens upwards only when space below is tight (<200px) AND there is more available space above the trigger than below it, preventing clipping inside scrollable modal containers.
-- Used by Profile.tsx, Analytics.tsx, Subjects.tsx, Test.tsx, LinksManager.tsx, StudyBuddy.tsx, Dashboard.tsx, Planner.tsx, and Timeline.tsx (replacing native selects for full design consistency across student-facing features).
+- **Portal-based rendering:** Uses `ReactDOM.createPortal` to mount the popover directly on `document.body`, so it's **never clipped** by any scrollable ancestor (`.screen-content`, modals, etc.)
+- Popover is `position: fixed` and positioned precisely using the trigger's `getBoundingClientRect()`, calculated on open
+- Automatically opens **upward** when there is more viewport space above the trigger, or **downward** otherwise; `maxHeight` is capped to the available space in that direction so all items are always scrollable and selectable
+- A `scroll` capture listener closes the popover when the page scrolls (prevents drift)
+- A full-screen invisible overlay div handles outside-click dismissal
+- Used by Profile.tsx, Analytics.tsx, Subjects.tsx, Test.tsx, LinksManager.tsx, StudyBuddy.tsx, Dashboard.tsx, Planner.tsx, and Timeline.tsx
 
 ### 6.16 `Timeline.tsx` (~713 lines)
 - Study timeline planner and visual roadmap tracker.
@@ -832,6 +835,7 @@ SYLLABUS_DATA = {
 - `calculateBuddyStatus` accepts a clock skew window (`diffMinutes >= -15 && diffMinutes < 8`) to handle minor discrepancies between client local system clocks and the database server clock without falsely showing offline users as online.
 - Non-admin database queries are optimized to only fetch own progress, added buddies, and group members to conserve bandwidth and DB memory (now managed globally in `App.tsx`).
 - Top contributor notifications are sent globally in `App.tsx` when a student's `todayHours` exceeds or equals the hours of all other members in a study group. Local status changes are tracked via `userWasTopInGroup` state.
+- Custom dropdowns ([CustomSelect.tsx](file:///f:/My%20web%20Projects/CA%20Next%20Door%20PWA%20Mobile/src/components/CustomSelect.tsx)) can be clipped by scrollable parent containers (like `.screen-content` or modals) when opened near the viewport bottom. A smart positioning system checks available space above and below the trigger relative to its closest scrollable parent, automatically selects the direction with more space, and dynamically applies a `maxHeight` inline style to prevent screen boundary overflow.
 
 ---
 
@@ -856,6 +860,6 @@ SYLLABUS_DATA = {
 | `src/constants/syllabus.ts` | 6 KB | ~157 |
 | `src/components/Tools.tsx` | 2.6 KB | ~97 |
 | `src/lib/syncProgress.ts` | 2.3 KB | ~79 |
-| `src/components/CustomSelect.tsx` | 2.5 KB | ~90 |
+| `src/components/CustomSelect.tsx` | 4.1 KB | ~123 |
 | `src/components/BottomNav.tsx` | 1.4 KB | ~48 |
 | `src/constants/mockTests.ts` | 596 B | ~29 |
