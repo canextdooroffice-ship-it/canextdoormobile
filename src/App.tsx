@@ -497,6 +497,9 @@ function App() {
       let missing = false;
       const newlyAddedSubjects: string[] = [];
       Object.entries(levelSyllabus).forEach(([subName, chapters]) => {
+        if (deletedDefaultSubjects.includes(subName)) {
+          return; // Ignore intentionally deleted subjects
+        }
         if (!progressState[subName]) {
           missing = true;
           newlyAddedSubjects.push(subName);
@@ -526,7 +529,7 @@ function App() {
 
       if (missing || hasMockChapters || hasOtherLevelSubjects) {
         setProgressState((prev) => {
-          let updated = { ...prev };
+          const updated = { ...prev };
           let changed = false;
 
           // Prune default subjects of other levels
@@ -582,14 +585,15 @@ function App() {
           if (changed) {
             console.log('[PRUNE] Saving pruned/updated progressState to local storage.');
             saveToStorage(LS_KEYS.PROGRESS, updated);
+            return updated;
           }
-          return updated;
+          return prev;
         });
 
         if (hasOtherLevelSubjects) {
           // Prune other levels' default subjects from subjectGroups
           setSubjectGroups((prevGroups) => {
-            let updatedGroups = { ...prevGroups };
+            const updatedGroups = { ...prevGroups };
             let groupsChanged = false;
             Object.keys(updatedGroups).forEach((subName) => {
               if (otherLevelsSubjects.has(subName)) {
@@ -599,34 +603,41 @@ function App() {
             });
             if (groupsChanged) {
               saveToStorage('cand_subjectGroups', updatedGroups);
+              return updatedGroups;
             }
-            return updatedGroups;
+            return prevGroups;
           });
 
           // Prune other levels' default subjects from slots
           setSlots((prevSlots) => {
-            const updatedSlots = prevSlots.filter((slot) => !otherLevelsSubjects.has(slot.subject));
-            if (updatedSlots.length !== prevSlots.length) {
+            const hasOther = prevSlots.some((slot) => otherLevelsSubjects.has(slot.subject));
+            if (hasOther) {
+              const updatedSlots = prevSlots.filter((slot) => !otherLevelsSubjects.has(slot.subject));
               saveToStorage(LS_KEYS.SLOTS, updatedSlots);
+              return updatedSlots;
             }
-            return updatedSlots;
+            return prevSlots;
           });
           // Prune other levels' default subjects from mistakes
           setMistakes((prevMistakes) => {
-            const updatedMistakes = prevMistakes.filter((m) => !otherLevelsSubjects.has(m.subjectName));
-            if (updatedMistakes.length !== prevMistakes.length) {
+            const hasOther = prevMistakes.some((m) => otherLevelsSubjects.has(m.subjectName));
+            if (hasOther) {
+              const updatedMistakes = prevMistakes.filter((m) => !otherLevelsSubjects.has(m.subjectName));
               saveToStorage(LS_KEYS.MISTAKES, updatedMistakes);
+              return updatedMistakes;
             }
-            return updatedMistakes;
+            return prevMistakes;
           });
 
           // Prune other levels' default subjects from revisions
           setRevisions((prevRevisions) => {
-            const updatedRevisions = prevRevisions.filter((r) => !otherLevelsSubjects.has(r.subjectName));
-            if (updatedRevisions.length !== prevRevisions.length) {
+            const hasOther = prevRevisions.some((r) => otherLevelsSubjects.has(r.subjectName));
+            if (hasOther) {
+              const updatedRevisions = prevRevisions.filter((r) => !otherLevelsSubjects.has(r.subjectName));
               saveToStorage(LS_KEYS.REVISIONS, updatedRevisions);
+              return updatedRevisions;
             }
-            return updatedRevisions;
+            return prevRevisions;
           });
         }
 
@@ -684,6 +695,16 @@ function App() {
     }
     return 0;
   });
+
+  const [studyRemindersEnabled, setStudyRemindersEnabled] = useState<boolean>(() =>
+    loadFromStorage<boolean>('cand_studyRemindersEnabled', false)
+  );
+  const [lastStudyReminderTime, setLastStudyReminderTime] = useState<number>(() =>
+    loadFromStorage<number>('cand_lastStudyReminderTime', 0)
+  );
+  const [hiddenSubjects, setHiddenSubjects] = useState<string[]>(() =>
+    loadFromStorage<string[]>('cand_hiddenSubjects', [])
+  );
 
   // Toast notifications state
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
@@ -974,6 +995,9 @@ function App() {
     saveToStorage(LS_KEYS.TODAY_HOURS, todayHours);
     saveToStorage(LS_KEYS.TODAY_DATE_KEY, getLocalDateString());
   }, [todayHours]);
+  useEffect(() => { saveToStorage('cand_studyRemindersEnabled', studyRemindersEnabled); }, [studyRemindersEnabled]);
+  useEffect(() => { saveToStorage('cand_lastStudyReminderTime', lastStudyReminderTime); }, [lastStudyReminderTime]);
+  useEffect(() => { saveToStorage('cand_hiddenSubjects', hiddenSubjects); }, [hiddenSubjects]);
   useEffect(() => { saveToStorage(LS_KEYS.SLOTS, slots); }, [slots]);
   useEffect(() => { saveToStorage(LS_KEYS.TASKS, tasks); }, [tasks]);
   useEffect(() => { saveToStorage(LS_KEYS.REVISIONS, revisions); }, [revisions]);
@@ -1375,8 +1399,32 @@ function App() {
             localStorage.setItem('cand_studyLogs', JSON.stringify(packed.studyLogs));
           }
           if (packed.todayHours !== undefined) {
-            setTodayHours(packed.todayHours);
-            localStorage.setItem('cand_todayHours', JSON.stringify(packed.todayHours));
+            const todayStr = getLocalDateString();
+            const backupDate = (packed as any).todayDate || '';
+            if (backupDate === todayStr) {
+              setTodayHours(packed.todayHours);
+              localStorage.setItem('cand_todayHours', JSON.stringify(packed.todayHours));
+              localStorage.setItem('cand_todayDateKey', todayStr);
+            } else {
+              setTodayHours(0);
+              localStorage.setItem('cand_todayHours', '0');
+              localStorage.setItem('cand_todayDateKey', todayStr);
+            }
+          }
+          if (packed.studyRemindersEnabled !== undefined) {
+            setStudyRemindersEnabled(packed.studyRemindersEnabled);
+            localStorage.setItem('cand_studyRemindersEnabled', JSON.stringify(packed.studyRemindersEnabled));
+          }
+          if (packed.lastStudyReminderTime !== undefined) {
+            setLastStudyReminderTime(packed.lastStudyReminderTime);
+            localStorage.setItem('cand_lastStudyReminderTime', JSON.stringify(packed.lastStudyReminderTime));
+          }
+          if (packed.hiddenSubjects) {
+            setHiddenSubjects(packed.hiddenSubjects);
+            localStorage.setItem('cand_hiddenSubjects', JSON.stringify(packed.hiddenSubjects));
+          } else {
+            setHiddenSubjects([]);
+            localStorage.setItem('cand_hiddenSubjects', '[]');
           }
           if (packed.groups) {
             setGroups(packed.groups);
@@ -1467,12 +1515,16 @@ function App() {
           sleepHistory: {},
           studyLogs: [],
           todayHours: 0,
+          todayDate: getLocalDateString(),
+          studyRemindersEnabled: false,
+          lastStudyReminderTime: 0,
           checkInHistory: [],
           subjectGroups: {},
           preparingFor: 'Both Groups',
           tests: [],
           streakMigrated: true,
           deletedDefaultSubjects: [],
+          hiddenSubjects: [],
           groups: []
         };
 
@@ -1514,6 +1566,9 @@ function App() {
         sleepHistory,
         studyLogs,
         todayHours,
+        todayDate: getLocalDateString(),
+        studyRemindersEnabled,
+        lastStudyReminderTime,
         checkInHistory,
         subjectGroups,
         preparingFor,
@@ -1522,6 +1577,7 @@ function App() {
         streakMigrated: true,
         timelinePhases,
         deletedDefaultSubjects,
+        hiddenSubjects,
         groups,
         timerRunning
       };
@@ -1539,7 +1595,7 @@ function App() {
     return () => {
       if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     };
-  }, [progressState, caLevel, studyTarget, totalHours, fullName, examStartDate, tasks, revisions, mistakes, slots, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, favouriteQuestions, session, timelinePhases, deletedDefaultSubjects, groups, timerRunning, heartbeat]);
+  }, [progressState, caLevel, studyTarget, totalHours, fullName, examStartDate, tasks, revisions, mistakes, slots, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, favouriteQuestions, session, timelinePhases, deletedDefaultSubjects, hiddenSubjects, groups, timerRunning, heartbeat, studyRemindersEnabled, lastStudyReminderTime]);
 
   // Listen for service worker update events from main.tsx
   useEffect(() => {
@@ -1679,6 +1735,62 @@ function App() {
 
     return () => clearInterval(interval);
   }, []);
+
+  // Reset today's study hours if the day changes while the app is open
+  useEffect(() => {
+    const checkDateChange = () => {
+      const today = getLocalDateString();
+      const storedKey = localStorage.getItem('cand_todayDateKey');
+      if (storedKey && storedKey !== today) {
+        console.log(`[DATE RESET] Day changed from ${storedKey} to ${today}. Resetting todayHours.`);
+        setTodayHours(0);
+        localStorage.setItem('cand_todayHours', '0');
+        localStorage.setItem('cand_todayDateKey', today);
+      }
+    };
+
+    checkDateChange();
+    const interval = setInterval(checkDateChange, 60000); // Check every minute
+    return () => clearInterval(interval);
+  }, []);
+
+  // Periodic 2-hour study reminder scheduler
+  useEffect(() => {
+    if (!studyRemindersEnabled) return;
+
+    const checkStudyReminder = () => {
+      // Check permission
+      if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+      const now = Date.now();
+      const lastReminder = parseInt(localStorage.getItem('cand_lastStudyReminderTime') || '0', 10);
+      const twoHoursMs = 2 * 60 * 60 * 1000;
+
+      // If it's the first time or more than 2 hours have passed
+      if (!lastReminder || now - lastReminder >= twoHoursMs) {
+        showLocalNotification(
+          'Time to Study! 📚',
+          "Keep your prep going strong! Take a few minutes to review your chapters or start a study slot."
+        );
+        setLastStudyReminderTime(now);
+        localStorage.setItem('cand_lastStudyReminderTime', now.toString());
+      }
+    };
+
+    checkStudyReminder();
+    const interval = setInterval(checkStudyReminder, 60000); // Check every minute
+    return () => clearInterval(interval);
+  }, [studyRemindersEnabled, showLocalNotification]);
+
+  const handleToggleStudyReminders = (enabled: boolean) => {
+    setStudyRemindersEnabled(enabled);
+    localStorage.setItem('cand_studyRemindersEnabled', JSON.stringify(enabled));
+    if (enabled) {
+      const now = Date.now();
+      setLastStudyReminderTime(now);
+      localStorage.setItem('cand_lastStudyReminderTime', now.toString());
+    }
+  };
 
   const handleUpdateCaLevel = async (level: string) => {
     setCaLevel(level);
@@ -1957,6 +2069,16 @@ function App() {
     setMistakes((prev) => prev.filter((m) => m.subjectName !== subName));
   };
 
+  const handleToggleHideSubject = (subName: string) => {
+    setHiddenSubjects((prev) => {
+      const next = prev.includes(subName)
+        ? prev.filter((name) => name !== subName)
+        : [...prev, subName];
+      saveToStorage('cand_hiddenSubjects', next);
+      return next;
+    });
+  };
+
   const handleSetVideoUrl = (subName: string, chapName: string, url: string) => {
     setProgressState((prev) => {
       const subject = prev[subName] || {};
@@ -2091,6 +2213,7 @@ function App() {
                 preparingFor={preparingFor}
                 subjectGroups={subjectGroups}
                 onOpenTools={() => setActiveTab('tools')}
+                hiddenSubjects={hiddenSubjects}
               />
             )}
             {activeTab === 'tools' && (
@@ -2159,6 +2282,8 @@ function App() {
                 onSetVideoUrl={handleSetVideoUrl}
                 onSetLdrNotes={handleSetLdrNotes}
                 onOpenTestPage={() => setActiveTab('test')}
+                hiddenSubjects={hiddenSubjects}
+                onToggleHideSubject={handleToggleHideSubject}
               />
             )}
             {activeTab === 'test' && (
@@ -2197,6 +2322,7 @@ function App() {
                 progressState={progressState}
                 studyTarget={studyTarget}
                 setStudyTarget={handleUpdateStudyTarget}
+                hiddenSubjects={hiddenSubjects}
                 studyHistory={studyHistory}
                 selectedDate={selectedDate}
                 setSelectedDate={setSelectedDate}
@@ -2225,6 +2351,7 @@ function App() {
                 setRevisions={setRevisions}
                 mistakes={mistakes}
                 setMistakes={setMistakes}
+                hiddenSubjects={hiddenSubjects}
               />
             )}
             {activeTab === 'profile' && (
@@ -2242,6 +2369,8 @@ function App() {
                 onUpdateExamStartDate={setExamStartDate}
                 preparingFor={preparingFor}
                 onUpdatePreparingFor={handleUpdatePreparingFor}
+                studyRemindersEnabled={studyRemindersEnabled}
+                onToggleStudyReminders={handleToggleStudyReminders}
               />
             )}
             {activeTab === 'admin' && isAdmin && (

@@ -39,6 +39,7 @@ interface DashboardProps {
   preparingFor?: 'Group 1' | 'Group 2' | 'Both Groups';
   subjectGroups?: Record<string, 'Group 1' | 'Group 2'>;
   onOpenTools: () => void;
+  hiddenSubjects?: string[];
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -62,6 +63,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   preparingFor = 'Both Groups',
   subjectGroups = {},
   onOpenTools,
+  hiddenSubjects = [],
 }) => {
   // Extract user alias from real name or email fallback
   const userAlias = userFullName || (userEmail ? userEmail.split('@')[0] : 'Student');
@@ -92,6 +94,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const getAllSubjects = () => {
     const defaultSubs = Object.keys(currentSyllabus);
     const all = Object.keys(progressState).filter((sub) => {
+      if (hiddenSubjects.includes(sub)) {
+        return false;
+      }
       const isDefaultCurrent = defaultSubs.includes(sub);
       const isDefaultAny = Object.values(SYLLABUS_DATA).some((levelSyllabus) =>
         Object.keys(levelSyllabus).includes(sub)

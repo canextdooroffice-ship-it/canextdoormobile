@@ -39,6 +39,7 @@ interface AnalyticsProps {
   setRevisions: React.Dispatch<React.SetStateAction<RevisionItem[]>>;
   mistakes: Mistake[];
   setMistakes: React.Dispatch<React.SetStateAction<Mistake[]>>;
+  hiddenSubjects?: string[];
 }
 
 const MISTAKE_CATEGORIES = ['Conceptual', 'Silly', 'Misread', 'Time', 'Formula'] as const;
@@ -70,6 +71,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
   setRevisions,
   mistakes,
   setMistakes,
+  hiddenSubjects = [],
 }) => {
 
   // Mistakes State passed via props
@@ -103,6 +105,9 @@ export const Analytics: React.FC<AnalyticsProps> = ({
     if (!progressState) return [];
     const defaultSubs = Object.keys(currentSyllabus);
     return Object.keys(progressState).filter((sub) => {
+      if (hiddenSubjects.includes(sub)) {
+        return false;
+      }
       const isDefaultCurrent = defaultSubs.includes(sub);
       const isDefaultAny = Object.values(SYLLABUS_DATA).some((levelSyllabus) =>
         Object.keys(levelSyllabus).includes(sub)
@@ -115,7 +120,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
       const chaps = progressState[sub] ? Object.keys(progressState[sub]) : [];
       return chaps.length > 0;
     });
-  }, [progressState, currentSyllabus]);
+  }, [progressState, currentSyllabus, hiddenSubjects]);
 
   const logChapters = React.useMemo(() => {
     if (!logSubject || !progressState || !progressState[logSubject]) return [];

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, ChevronUp, Trash2, Plus, Search, Filter, Play, Sparkles, Check, CheckCircle, Bold, Italic, Underline, List, Highlighter, Palette, ClipboardList } from 'lucide-react';
+import { ChevronDown, ChevronUp, Trash2, Plus, Search, Filter, Play, Sparkles, Check, CheckCircle, Bold, Italic, Underline, List, Highlighter, Palette, ClipboardList, Eye, EyeOff } from 'lucide-react';
 import { SYLLABUS_DATA } from '../constants/syllabus';
 import { CustomSelect } from './CustomSelect';
 
@@ -37,6 +37,8 @@ interface SubjectsProps {
   onSetVideoUrl: (subName: string, chapName: string, url: string) => void;
   onSetLdrNotes: (subName: string, chapName: string, notes: string, ldrs: boolean) => void;
   onOpenTestPage: () => void;
+  hiddenSubjects?: string[];
+  onToggleHideSubject: (subName: string) => void;
 }
 
 export const Subjects: React.FC<SubjectsProps> = ({
@@ -55,6 +57,8 @@ export const Subjects: React.FC<SubjectsProps> = ({
   onSetVideoUrl,
   onSetLdrNotes,
   onOpenTestPage,
+  hiddenSubjects = [],
+  onToggleHideSubject,
 }) => {
   const currentSyllabus = (SYLLABUS_DATA[caLevel as keyof typeof SYLLABUS_DATA] || SYLLABUS_DATA.Intermediate) as Record<string, string[]>;
 
@@ -62,6 +66,9 @@ export const Subjects: React.FC<SubjectsProps> = ({
   const getAllSubjects = () => {
     const defaultSubs = Object.keys(currentSyllabus);
     return Object.keys(progressState).filter((sub) => {
+      if (hiddenSubjects.includes(sub)) {
+        return false;
+      }
       const isDefaultCurrent = defaultSubs.includes(sub);
       const isDefaultAny = Object.values(SYLLABUS_DATA).some((levelSyllabus) =>
         Object.keys(levelSyllabus).includes(sub)
@@ -344,6 +351,19 @@ export const Subjects: React.FC<SubjectsProps> = ({
             </div>
           </div>
           <div className="subject-header-right">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleHideSubject(subName);
+                showToast(`Hidden subject "${subName}"`, 'info');
+              }}
+              className="subject-delete-btn"
+              style={{ color: 'var(--text-muted)', marginRight: '6px' }}
+              title="Hide Subject"
+            >
+              <EyeOff size={16} />
+            </button>
             <button
               type="button"
               onClick={(e) => {
@@ -817,6 +837,58 @@ export const Subjects: React.FC<SubjectsProps> = ({
               .map((subName) => renderSubjectCard(subName))
           )}
         </div>
+
+        {/* Hidden Subjects Section */}
+        {hiddenSubjects && hiddenSubjects.length > 0 && (
+          <div className="subject-group-section mt-6" style={{ opacity: 0.85 }}>
+            <div className="subject-group-header" style={{ borderBottomColor: 'var(--border-color)' }}>
+              <span className="group-title-label">Hidden Subjects</span>
+              <span className="group-count-badge" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                {hiddenSubjects.length}
+              </span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
+              {hiddenSubjects.map((subName) => (
+                <div 
+                  key={subName}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '12px 16px',
+                    backgroundColor: 'var(--bg-secondary)',
+                    border: '1px dashed var(--border-color)',
+                    borderRadius: '12px',
+                  }}
+                >
+                  <span style={{ fontSize: '13.5px', fontWeight: '600', color: 'var(--text-muted)' }}>{subName}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onToggleHideSubject(subName);
+                      showToast(`Restored subject "${subName}"`, 'success');
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--accent-primary)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      padding: '4px 8px'
+                    }}
+                  >
+                    <Eye size={14} />
+                    <span>Unhide</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {editingVideo && createPortal(

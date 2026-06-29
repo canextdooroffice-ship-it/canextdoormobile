@@ -57,6 +57,7 @@ interface PlannerProps {
   studyLogs: StudyLog[];
   onDeleteStudyLog: (logId: string) => void;
   onResetDailyTotal: (date: string) => void;
+  hiddenSubjects?: string[];
 }
 
 interface BarChartProps {
@@ -527,6 +528,7 @@ export const Planner: React.FC<PlannerProps> = ({
   studyLogs,
   onDeleteStudyLog,
   onResetDailyTotal,
+  hiddenSubjects = [],
 }) => {
   const [plannerTab, setPlannerTab] = useState<'tasks' | 'timer'>('tasks');
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
@@ -720,6 +722,9 @@ export const Planner: React.FC<PlannerProps> = ({
   const getAllSubjects = () => {
     const defaultSubs = Object.keys(currentSyllabus);
     return Object.keys(progressState).filter((sub) => {
+      if (hiddenSubjects.includes(sub)) {
+        return false;
+      }
       const isDefaultCurrent = defaultSubs.includes(sub);
       const isDefaultAny = Object.values(SYLLABUS_DATA).some((levelSyllabus) =>
         Object.keys(levelSyllabus).includes(sub)

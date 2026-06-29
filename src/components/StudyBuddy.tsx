@@ -52,6 +52,7 @@ export const calculateWeightedProgress = (progressState: any, fallbackSubjectGro
   // Extract checklist and subjectGroups from the packed cloud state if present
   const actualProgress = progressState.checklist ? progressState.checklist : progressState;
   const actualSubjectGroups = progressState.subjectGroups ? progressState.subjectGroups : fallbackSubjectGroups;
+  const hiddenSubs = progressState.hiddenSubjects ? progressState.hiddenSubjects : [];
 
   const subjects = Object.keys(actualProgress);
   if (subjects.length === 0) return 0;
@@ -60,6 +61,9 @@ export const calculateWeightedProgress = (progressState: any, fallbackSubjectGro
   let count = 0;
 
   subjects.forEach(subName => {
+    if (hiddenSubs.includes(subName)) {
+      return; // Ignore this subject if it is hidden
+    }
     // Only include subjects that have an assigned group ('Group 1' or 'Group 2')
     const group = actualSubjectGroups ? actualSubjectGroups[subName] : null;
     if (group !== 'Group 1' && group !== 'Group 2') {

@@ -836,6 +836,8 @@ SYLLABUS_DATA = {
 - Non-admin database queries are optimized to only fetch own progress, added buddies, and group members to conserve bandwidth and DB memory (now managed globally in `App.tsx`).
 - Top contributor notifications are sent globally in `App.tsx` when a student's `todayHours` exceeds or equals the hours of all other members in a study group. Local status changes are tracked via `userWasTopInGroup` state.
 - Custom dropdowns ([CustomSelect.tsx](file:///f:/My%20web%20Projects/CA%20Next%20Door%20PWA%20Mobile/src/components/CustomSelect.tsx)) can be clipped by scrollable parent containers (like `.screen-content` or modals) when opened near the viewport bottom. A smart positioning system checks available space above and below the trigger relative to its closest scrollable parent, automatically selects the direction with more space, and dynamically applies a `maxHeight` inline style to prevent screen boundary overflow.
+- **State-reference loops in pruning/restore checks**: When modifying state within a `useEffect` that listens to that state (e.g. `progressState`), ensure that intentionally deleted default subjects are excluded from the missing check. Additionally, always return the original state reference `prev` in state updater callbacks if no modifications occurred. Returning a new object reference `{ ...prev }` causes infinite re-render loops that continuously clear and reschedule the debounced Supabase save timer, blocking cloud sync and reverting deletions upon reload.
+- **Daily study hours reset validation**: When loading progress state from the cloud or local storage, verify that the backup date (`todayDate` in the packed state) matches the current local date. If the dates do not match, reset `todayHours` to `0` to prevent yesterday's hours from leaking into today's count and corrupting study group statistics. Additionally, use a periodic poller to reset hours at the midnight transition for users who keep the app open.
 
 ---
 
@@ -844,16 +846,16 @@ SYLLABUS_DATA = {
 | File | Size | Lines |
 |------|------|-------|
 | `src/index.css` | 252 KB | ~12,750 |
-| `src/App.tsx` | 92 KB | ~2,285 |
+| `src/App.tsx` | 100 KB | ~2,600 |
 | `src/components/Test.tsx` | 72 KB | ~2,000 |
 | `src/components/AdminPanel.tsx` | 67 KB | ~1,800 |
-| `src/components/Planner.tsx` | 67 KB | ~1,800 |
+| `src/components/Planner.tsx` | 67 KB | ~1,720 |
 | `src/components/Timeline.tsx` | 27 KB | ~713 |
-| `src/components/StudyBuddy.tsx` | 57 KB | ~1,276 |
-| `src/components/Analytics.tsx` | 42 KB | ~1,200 |
-| `src/components/Subjects.tsx` | 42 KB | ~1,070 |
-| `src/components/Dashboard.tsx` | 39 KB | ~1,100 |
-| `src/components/Profile.tsx` | 23 KB | ~596 |
+| `src/components/StudyBuddy.tsx` | 58 KB | ~1,410 |
+| `src/components/Analytics.tsx` | 42 KB | ~1,020 |
+| `src/components/Subjects.tsx` | 44 KB | ~1,133 |
+| `src/components/Dashboard.tsx` | 39 KB | ~971 |
+| `src/components/Profile.tsx` | 25 KB | ~650 |
 | `src/components/LinksManager.tsx` | 16 KB | ~461 |
 | `src/components/TimeManager.tsx` | 12 KB | ~323 |
 | `src/components/Auth.tsx` | 10 KB | ~300 |

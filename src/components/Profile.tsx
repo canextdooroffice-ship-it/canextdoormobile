@@ -17,6 +17,8 @@ interface ProfileProps {
   onUpdateExamStartDate: (date: string) => void;
   preparingFor: 'Group 1' | 'Group 2' | 'Both Groups';
   onUpdatePreparingFor: (val: 'Group 1' | 'Group 2' | 'Both Groups') => void;
+  studyRemindersEnabled: boolean;
+  onToggleStudyReminders: (enabled: boolean) => void;
 }
 
 export const Profile: React.FC<ProfileProps> = ({
@@ -33,6 +35,8 @@ export const Profile: React.FC<ProfileProps> = ({
   onUpdateExamStartDate,
   preparingFor: preparingForProp,
   onUpdatePreparingFor,
+  studyRemindersEnabled,
+  onToggleStudyReminders,
 }) => {
   // Load initial values from localStorage
   const getStoredValue = (key: string, fallback: string) => {
@@ -462,6 +466,57 @@ export const Profile: React.FC<ProfileProps> = ({
               <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '3px', lineHeight: '1.4' }}>
                 Receive immediate alerts on mobile when new <strong>{caLevel}</strong> papers are uploaded.
               </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', padding: '14px', borderRadius: '14px' }}>
+            <div style={{ textAlign: 'left', flex: 1, paddingRight: '12px' }}>
+              <div style={{ fontWeight: '700', fontSize: '14px', color: 'var(--text-primary)' }}>Study Reminders (Every 2 Hours)</div>
+              <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '3px', lineHeight: '1.4' }}>
+                Receive local notifications every 2 hours to keep you focused and hit your study goals.
+              </div>
+            </div>
+            <div className="toggle-switch-container">
+              <label className="switch-label-wrap" style={{ position: 'relative', display: 'inline-block', width: '42px', height: '24px' }}>
+                <input
+                  type="checkbox"
+                  checked={studyRemindersEnabled}
+                  onChange={(e) => {
+                    const enabled = e.target.checked;
+                    if (enabled && notifPermission !== 'granted') {
+                      requestNotificationPermission().then(() => {
+                        if (Notification.permission === 'granted') {
+                          onToggleStudyReminders(true);
+                        } else {
+                          onToggleStudyReminders(false);
+                        }
+                      });
+                    } else {
+                      onToggleStudyReminders(enabled);
+                    }
+                  }}
+                  style={{ opacity: 0, width: 0, height: 0 }}
+                />
+                <span style={{
+                  position: 'absolute',
+                  cursor: 'pointer',
+                  top: 0, left: 0, right: 0, bottom: 0,
+                  backgroundColor: studyRemindersEnabled ? 'var(--accent-primary)' : '#cbd5e1',
+                  transition: '0.3s',
+                  borderRadius: '24px'
+                }}>
+                  <span style={{
+                    position: 'absolute',
+                    content: '""',
+                    height: '18px', width: '18px',
+                    left: studyRemindersEnabled ? '20px' : '4px',
+                    bottom: '3px',
+                    backgroundColor: 'white',
+                    transition: '0.3s',
+                    borderRadius: '50%'
+                  }} />
+                </span>
+              </label>
             </div>
           </div>
 
