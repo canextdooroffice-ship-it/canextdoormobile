@@ -1346,6 +1346,9 @@ function App() {
             timelinePhases?: TimelinePhase[];
             deletedDefaultSubjects?: string[];
             groups?: any[];
+            studyRemindersEnabled?: boolean;
+            lastStudyReminderTime?: number;
+            hiddenSubjects?: string[];
           };
           setProgressState(packed.checklist || {});
           setTasks(packed.tasks || []);

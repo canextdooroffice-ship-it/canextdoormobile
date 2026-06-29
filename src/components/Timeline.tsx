@@ -135,11 +135,24 @@ export const Timeline: React.FC<TimelineProps> = ({
   // Overall progress based on status of phases
   const timelineProgressPercent = useMemo(() => {
     if (timelinePhases.length === 0) return 0;
-    const completedCount = timelinePhases.filter(p => p.status === 'completed').length;
-    const inProgressCount = timelinePhases.filter(p => p.status === 'in-progress').length;
-    // in-progress counted as half-done for stats
-    const score = completedCount * 100 + inProgressCount * 50;
-    return Math.round(score / timelinePhases.length);
+    
+    let totalProgress = 0;
+    
+    timelinePhases.forEach((p) => {
+      if (p.status === 'completed') {
+        totalProgress += 100;
+      } else if (p.status === 'pending') {
+        totalProgress += 0;
+      } else {
+        // in-progress: calculate actual percentage based on completed days
+        const duration = getDatesInRange(p.startDate, p.endDate).length;
+        const completedCount = p.completedDays ? p.completedDays.length : 0;
+        const progress = duration > 0 ? (completedCount / duration) * 100 : 0;
+        totalProgress += progress;
+      }
+    });
+    
+    return Math.round(totalProgress / timelinePhases.length);
   }, [timelinePhases]);
 
   // Group sorted phases into clusters of overlapping intervals
