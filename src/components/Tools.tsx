@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, Link as LinkIcon, Sparkles, Clock, Users, Calendar } from 'lucide-react';
+import { ArrowLeft, Link as LinkIcon, Sparkles, Clock, Users, Calendar, Layers } from 'lucide-react';
 
 interface ToolsProps {
   onBack: () => void;
@@ -81,6 +81,21 @@ export const Tools: React.FC<ToolsProps> = ({ onBack, onOpenTool }) => {
             <h3 className="tool-card-title">Timeline</h3>
             <p className="tool-card-desc">
               Plan out your entire study timeline, set revision milestones, and track days remaining till exams.
+            </p>
+          </div>
+        </div>
+
+        <div 
+          className="tool-menu-card clickable"
+          onClick={() => onOpenTool('flashcards')}
+        >
+          <div className="tool-card-icon-wrapper indigo animate-pulse-subtle">
+            <Layers size={20} />
+          </div>
+          <div className="tool-card-info">
+            <h3 className="tool-card-title">Flashcards</h3>
+            <p className="tool-card-desc">
+              Master key concepts, section codes, and case laws using spaced repetition (Leitner system) flashcards.
             </p>
           </div>
         </div>

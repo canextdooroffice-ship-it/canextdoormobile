@@ -20,6 +20,8 @@ import { Timeline } from './components/Timeline';
 import type { TimelinePhase } from './components/Timeline';
 import type { TestRecord } from './components/Test';
 import { AdminPanel } from './components/AdminPanel';
+import { Flashcards } from './components/Flashcards';
+import type { Flashcard, FlashcardDeck } from './components/Flashcards';
 import type { MockTestPaper } from './constants/mockTests';
 import { SYLLABUS_DATA } from './constants/syllabus';
 import type { ProgressState } from './components/Subjects';
@@ -43,6 +45,8 @@ const LS_KEYS = {
   TODAY_DATE_KEY: 'cand_todayDateKey',
   STREAK_COUNT: 'cand_streakCount',
   CHECKED_IN_TODAY: 'cand_checkedInToday',
+  FLASHCARDS: 'cand_flashcards',
+  FLASHCARD_DECKS: 'cand_flashcard_decks',
 } as const;
 
 const loadFromStorage = <T,>(key: string, fallback: T): T => {
@@ -755,6 +759,8 @@ function App() {
   const [tasks, setTasks] = useState<Task[]>(() => loadFromStorage(LS_KEYS.TASKS, []));
   const [revisions, setRevisions] = useState<RevisionItem[]>(() => loadFromStorage(LS_KEYS.REVISIONS, []));
   const [mistakes, setMistakes] = useState<Mistake[]>(() => loadFromStorage(LS_KEYS.MISTAKES, []));
+  const [flashcards, setFlashcards] = useState<Flashcard[]>(() => loadFromStorage(LS_KEYS.FLASHCARDS, []));
+  const [flashcardDecks, setFlashcardDecks] = useState<FlashcardDeck[]>(() => loadFromStorage(LS_KEYS.FLASHCARD_DECKS, []));
 
   // Study history & planner states
   const [selectedDate, setSelectedDate] = useState(() => getLocalDateString());
@@ -875,6 +881,11 @@ function App() {
       setTodayHours((prev) => parseFloat((prev + hours).toFixed(1)));
     }
     
+    // Reset study reminder timer since user is active
+    const nowMs = Date.now();
+    setLastStudyReminderTime(nowMs);
+    localStorage.setItem('cand_lastStudyReminderTime', nowMs.toString());
+
     // Update study history for the date
     setStudyHistory((prev) => {
       const updated = { ...prev, [dateStr]: parseFloat(((prev[dateStr] || 0) + hours).toFixed(1)) };
@@ -894,7 +905,7 @@ function App() {
       localStorage.setItem('cand_studyLogs', JSON.stringify(updated));
       return updated;
     });
-  }, [selectedDate]);
+  }, [selectedDate, setLastStudyReminderTime]);
 
   const [isTimerFullscreen, setIsTimerFullscreen] = useState(false);
   const [isChartFullscreen, setIsChartFullscreen] = useState(false);
@@ -1308,7 +1319,7 @@ function App() {
             'cand_streakCount', 'cand_checkedInToday', 'cand_checkInHistory', 'cand_studyHistory',
             'cand_wakeHistory', 'cand_sleepHistory', 'cand_studyLogs', 'cand_lastCheckInDate',
             'cand_subjectGroups', 'cand_preparingFor', 'cand_tests', 'cand_timeline_phases',
-            'cand_study_groups_v2'
+            'cand_study_groups_v2', 'cand_flashcards', 'cand_flashcard_decks'
           ];
           keys.forEach(k => localStorage.removeItem(k));
           
@@ -1345,10 +1356,12 @@ function App() {
             streakMigrated?: boolean;
             timelinePhases?: TimelinePhase[];
             deletedDefaultSubjects?: string[];
-            groups?: any[];
+             groups?: any[];
             studyRemindersEnabled?: boolean;
             lastStudyReminderTime?: number;
             hiddenSubjects?: string[];
+            flashcards?: Flashcard[];
+            flashcardDecks?: FlashcardDeck[];
           };
           setProgressState(packed.checklist || {});
           setTasks(packed.tasks || []);
@@ -1356,7 +1369,21 @@ function App() {
           setMistakes(packed.mistakes || []);
           setSlots(packed.slots || []);
           setTests(packed.tests || []);
-          setFavouriteQuestions(packed.favouriteQuestions || []);
+           setFavouriteQuestions(packed.favouriteQuestions || []);
+          if (packed.flashcards) {
+            setFlashcards(packed.flashcards);
+            localStorage.setItem('cand_flashcards', JSON.stringify(packed.flashcards));
+          } else {
+            setFlashcards([]);
+            localStorage.removeItem('cand_flashcards');
+          }
+          if (packed.flashcardDecks) {
+            setFlashcardDecks(packed.flashcardDecks);
+            localStorage.setItem('cand_flashcard_decks', JSON.stringify(packed.flashcardDecks));
+          } else {
+            setFlashcardDecks([]);
+            localStorage.removeItem('cand_flashcard_decks');
+          }
           if (packed.deletedDefaultSubjects) {
             setDeletedDefaultSubjects(packed.deletedDefaultSubjects);
             localStorage.setItem('cand_deletedDefaultSubjects', JSON.stringify(packed.deletedDefaultSubjects));
@@ -1501,6 +1528,8 @@ function App() {
         localStorage.removeItem('cand_tests');
         localStorage.removeItem('cand_deletedDefaultSubjects');
         localStorage.removeItem('cand_study_groups_v2');
+        localStorage.removeItem('cand_flashcards');
+        localStorage.removeItem('cand_flashcard_decks');
 
         // Pack clean state for Supabase
         const packedProgress = {
@@ -1528,7 +1557,9 @@ function App() {
           streakMigrated: true,
           deletedDefaultSubjects: [],
           hiddenSubjects: [],
-          groups: []
+          groups: [],
+          flashcards: [],
+          flashcardDecks: []
         };
 
         await saveToSupabase(userId, {
@@ -1582,7 +1613,9 @@ function App() {
         deletedDefaultSubjects,
         hiddenSubjects,
         groups,
-        timerRunning
+        timerRunning,
+        flashcards,
+        flashcardDecks
       };
 
       saveToSupabase(userId, {
@@ -1598,7 +1631,7 @@ function App() {
     return () => {
       if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     };
-  }, [progressState, caLevel, studyTarget, totalHours, fullName, examStartDate, tasks, revisions, mistakes, slots, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, favouriteQuestions, session, timelinePhases, deletedDefaultSubjects, hiddenSubjects, groups, timerRunning, heartbeat, studyRemindersEnabled, lastStudyReminderTime]);
+  }, [progressState, caLevel, studyTarget, totalHours, fullName, examStartDate, tasks, revisions, mistakes, slots, streakCount, checkedInToday, studyHistory, wakeHistory, sleepHistory, studyLogs, todayHours, checkInHistory, subjectGroups, preparingFor, tests, favouriteQuestions, session, timelinePhases, deletedDefaultSubjects, hiddenSubjects, groups, timerRunning, heartbeat, studyRemindersEnabled, lastStudyReminderTime, flashcards, flashcardDecks]);
 
   // Listen for service worker update events from main.tsx
   useEffect(() => {
@@ -1657,8 +1690,6 @@ function App() {
 
   // Background scheduler for study slot starting times
   useEffect(() => {
-    let lastNotifiedKey = '';
-
     const checkScheduleSlots = () => {
       if (!('Notification' in window) || Notification.permission !== 'granted') return;
 
@@ -1680,20 +1711,14 @@ function App() {
         const slots = JSON.parse(rawSlots) as LocalScheduleSlot[];
 
         const now = new Date();
-        const currentHHMM = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-
-        // Key to prevent duplicate fires within the same minute
-        const currentMinuteKey = `${now.toDateString()}_${currentHHMM}`;
-        if (currentMinuteKey === lastNotifiedKey) return;
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
         const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
         const todayDayName = days[now.getDay()];
-        const todayDateStr = now.toISOString().split('T')[0];
+        const todayDateStr = getLocalDateString(now);
 
-        // Find if any slot is starting now
+        // Find if any slot is currently active and started recently (within last 15 mins)
         const activeSlot = slots.find((s) => {
-          if (s.timeStart !== currentHHMM) return false;
-
           // Check date/day constraints
           if (s.isCustomRange) {
             if (s.dateFrom && todayDateStr < s.dateFrom) return false;
@@ -1701,30 +1726,39 @@ function App() {
           } else {
             if (s.day && s.day.toLowerCase() !== todayDayName) return false;
           }
-          return true;
+
+          if (!s.timeStart) return false;
+          
+          const [startH, startM] = s.timeStart.split(':').map(Number);
+          const startMinutes = startH * 60 + startM;
+
+          // Notify if current time is within 15 minutes after start time
+          const startedRecently = currentMinutes >= startMinutes && (currentMinutes - startMinutes) <= 15;
+          return startedRecently;
         });
 
         if (activeSlot) {
-          lastNotifiedKey = currentMinuteKey;
+          const notifiedSlotsKey = 'cand_notified_slots_today';
+          let notifiedSlots: Record<string, string> = {};
+          try {
+            notifiedSlots = JSON.parse(localStorage.getItem(notifiedSlotsKey) || '{}');
+          } catch {}
 
-          const title = 'Study Session Starting! 📚';
-          const body = `${activeSlot.subject}${activeSlot.chapter ? ` - ${activeSlot.chapter}` : ''} starts now.`;
+          // Prune old days' data
+          Object.keys(notifiedSlots).forEach(key => {
+            if (notifiedSlots[key] !== todayDateStr) {
+              delete notifiedSlots[key];
+            }
+          });
 
-          if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.ready
-              .then((registration) => {
-                registration.showNotification(title, {
-                  body: body,
-                  icon: '/logo.png',
-                  badge: '/logo.png',
-                  vibrate: [200, 100, 200],
-                } as NotificationOptions & { vibrate?: number[]; badge?: string });
-              })
-              .catch(() => {
-                new Notification(title, { body });
-              });
-          } else {
-            new Notification(title, { body });
+          if (!notifiedSlots[activeSlot.id]) {
+            // Mark as notified today
+            notifiedSlots[activeSlot.id] = todayDateStr;
+            localStorage.setItem(notifiedSlotsKey, JSON.stringify(notifiedSlots));
+
+            const title = 'Study Session Starting! 📚';
+            const body = `${activeSlot.subject}${activeSlot.chapter ? ` - ${activeSlot.chapter}` : ''} starts now.`;
+            showLocalNotification(title, body);
           }
         }
       } catch (err) {
@@ -1737,7 +1771,7 @@ function App() {
     const interval = setInterval(checkScheduleSlots, 30000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [showLocalNotification]);
 
   // Reset today's study hours if the day changes while the app is open
   useEffect(() => {
@@ -2139,6 +2173,8 @@ function App() {
     setTasks([]);
     setRevisions([]);
     setMistakes([]);
+    setFlashcards([]);
+    setFlashcardDecks([]);
     setCheckInHistory([]);
     setStudyHistory({});
     setWakeHistory({});
@@ -2177,6 +2213,8 @@ function App() {
     localStorage.removeItem('cand_timeline_phases');
     localStorage.removeItem('cand_deletedDefaultSubjects');
     localStorage.removeItem('cand_study_groups_v2');
+    localStorage.removeItem('cand_flashcards');
+    localStorage.removeItem('cand_flashcard_decks');
   };
 
   const handleLogout = () => {
@@ -2225,9 +2263,29 @@ function App() {
                 onOpenTool={(toolId) => setActiveTab(toolId)}
               />
             )}
-            {activeTab === 'links-manager' && (
+             {activeTab === 'links-manager' && (
               <LinksManager
                 onBack={() => setActiveTab('tools')}
+              />
+            )}
+            {activeTab === 'flashcards' && (
+              <Flashcards
+                flashcards={flashcards}
+                setFlashcards={(cards) => {
+                  setFlashcards(cards);
+                  saveToStorage('cand_flashcards', cards);
+                }}
+                flashcardDecks={flashcardDecks}
+                setFlashcardDecks={(decks) => {
+                  setFlashcardDecks(decks);
+                  saveToStorage('cand_flashcard_decks', decks);
+                }}
+                mistakes={mistakes}
+                setMistakes={setMistakes}
+                progressState={progressState}
+                caLevel={caLevel}
+                onBack={() => setActiveTab('tools')}
+                showToast={showToast}
               />
             )}
             {activeTab === 'time-manager' && (

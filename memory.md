@@ -66,9 +66,9 @@ CA Next Door PWA Mobile/
 │   └── icons.svg                 # SVG icon set
 ├── src/
 │   ├── main.tsx                  # Entry: renders <App/>, registers SW, handles updates
-│   ├── App.tsx                   # ⭐ MONOLITHIC MAIN FILE (~2110 lines, ~80KB)
+│   ├── App.tsx                   # ⭐ MONOLITHIC MAIN FILE (~2630 lines, ~100KB)
 │   ├── supabaseClient.ts         # Supabase client initialization with fallback
-│   ├── index.css                 # ⭐ ALL STYLES (~12,600 lines, ~251KB)
+│   ├── index.css                 # ⭐ ALL STYLES (~14,500 lines, ~296KB)
 │   ├── components/
 │   │   ├── AdminPanel.tsx        # Admin: manage subjects, mock papers, users (~67KB)
 │   │   ├── Analytics.tsx         # Revision tracker & mistake journal (~42KB)
@@ -84,6 +84,7 @@ CA Next Door PWA Mobile/
 │   │   ├── Test.tsx              # Mock test system: MCQ + Subjective (~72KB)
 │   │   ├── Timeline.tsx          # Study timeline planning & roadmap (~25KB)
 │   │   ├── TimeManager.tsx       # Study time allocation analysis (~12KB)
+│   │   ├── Flashcards.tsx        # Spaced repetition flashcards, deck manager & statistics (~65KB)
 │   │   └── Tools.tsx             # Tools hub page (links to sub-features) (~2.6KB)
 │   ├── constants/
 │   │   ├── syllabus.ts           # Default CA syllabus data (subjects & chapters)
@@ -154,6 +155,8 @@ All state lives in `App.tsx` via `useState` hooks and is **props-drilled** to ch
 | `progressState` | ProgressState | **THE MAIN DATA STRUCTURE** — nested map of all subjects/chapters |
 | `tests` | TestRecord[] | Test attempt results |
 | `favouriteQuestions` | any[] | Bookmarked test questions |
+| `flashcards` | Flashcard[] | Spaced repetition cards |
+| `flashcardDecks` | FlashcardDeck[] | Flashcard decks |
 | `deletedDefaultSubjects` | string[] | Student-deleted global/default subjects list |
 | `dynamicPapers` | MockTestPaper[] | Mock papers fetched from Supabase |
 | `globalSubjects` | any[] | Admin-managed subjects from Supabase |
@@ -280,6 +283,30 @@ interface SubjectiveQuestion {
   suggestedAnswer: string;
 }
 
+// Flashcard & Deck structures — imported from ./components/Flashcards
+interface Flashcard {
+  id: string;
+  front: string;
+  back: string;
+  hint?: string;
+  tags?: string[];
+  easeFactor: number;
+  interval: number;
+  repetitions: number;
+  nextReviewDate: string;
+  status: 'new' | 'learning' | 'review' | 'mastered';
+  lastGraded?: 'Again' | 'Hard' | 'Good' | 'Easy';
+  subjectName: string;
+  chapterName?: string;
+}
+
+interface FlashcardDeck {
+  id: string;
+  name: string;
+  subjectName: string;
+  isCustom?: boolean;
+}
+
 // Timeline phase — imported from ./components/Timeline
 interface TimelinePhase {
   id: string;
@@ -346,6 +373,7 @@ const LS_KEYS = {
 // Profile keys: cand_courseName, cand_attemptMonthYear, etc.
 // Study Buddy: cand_study_buddies_v2, cand_study_groups_v2
 // Links Manager: cand_links_manager_links
+// Flashcards: cand_flashcards, cand_flashcard_decks
 ```
 
 **Supabase Cloud (secondary, synced):**
@@ -441,7 +469,7 @@ is_admin = true (user_metadata JWT claim)
 
 ## 6. Component Deep-Dive
 
-### 6.1 `App.tsx` — Main Orchestrator (~2100 lines)
+### 6.1 `App.tsx` — Main Orchestrator (~2600 lines)
 
 The monolithic heart. All state, all persistence, all routing.
 
@@ -596,11 +624,12 @@ Three sections:
 - All profile fields persisted in localStorage with `cand_` prefix
 
 ### 6.12 `Tools.tsx` (~97 lines)
-- Navigation hub with 4 tool cards:
+- Navigation hub with 5 tool cards:
   1. Links Manager (`links-manager`)
   2. Time Manager (`time-manager`)
   3. Study Buddy & Groups (`study-buddy`)
   4. Timeline (`timeline`)
+  5. Flashcards (`flashcards`)
 - "Coming soon" banner
 - Calls `onOpenTool(toolId)` → parent sets `activeTab`
 
@@ -639,6 +668,21 @@ Three sections:
 - Uses `CustomSelect` for status select dropdown and circular picker for tag accent colors.
 - Uses `createPortal` to render Exam Date Picker and Phase Editor overlays directly to `document.body`, preventing bottom nav collision.
 - Persisted in localStorage key `cand_timeline_phases` and synced to Supabase backup.
+
+### 6.17 `Flashcards.tsx` (~1380 lines)
+- Spaced repetition flashcards utilizing the Leitner review scheduling system.
+- Automatically initializes default decks and pre-populated sample cards matching the user's active CA Level subjects.
+- Displays deck statistics (total cards, mastered status, review progress bar) and active due review counts.
+- Support creation, edit, and deletion of custom decks and custom flashcard items (question front, answer back, hints, tags).
+- **Spaced Repetition Review Mode:**
+  - Interactive fullscreen review overlay.
+  - Hardware-accelerated Y-axis 3D card flips.
+  - Leitner grade selections (**Again**, **Hard**, **Good**, **Easy**) updating review intervals.
+  - Hint reveal overlays.
+- **Mistake Journal Integration:**
+  - Pulls logged mistakes matching current subject and converts/imports them as flashcard items with single click.
+  - Direct logger button to file failed flashcard attempts to the Mistake Journal instantly during review.
+- Persisted in local storage keys `cand_flashcards` and `cand_flashcard_decks` and synced to Supabase JSONB progress backup.
 
 ---
 
@@ -838,6 +882,11 @@ SYLLABUS_DATA = {
 - Custom dropdowns ([CustomSelect.tsx](file:///f:/My%20web%20Projects/CA%20Next%20Door%20PWA%20Mobile/src/components/CustomSelect.tsx)) can be clipped by scrollable parent containers (like `.screen-content` or modals) when opened near the viewport bottom. A smart positioning system checks available space above and below the trigger relative to its closest scrollable parent, automatically selects the direction with more space, and dynamically applies a `maxHeight` inline style to prevent screen boundary overflow.
 - **State-reference loops in pruning/restore checks**: When modifying state within a `useEffect` that listens to that state (e.g. `progressState`), ensure that intentionally deleted default subjects are excluded from the missing check. Additionally, always return the original state reference `prev` in state updater callbacks if no modifications occurred. Returning a new object reference `{ ...prev }` causes infinite re-render loops that continuously clear and reschedule the debounced Supabase save timer, blocking cloud sync and reverting deletions upon reload.
 - **Daily study hours reset validation**: When loading progress state from the cloud or local storage, verify that the backup date (`todayDate` in the packed state) matches the current local date. If the dates do not match, reset `todayHours` to `0` to prevent yesterday's hours from leaking into today's count and corrupting study group statistics. Additionally, use a periodic poller to reset hours at the midnight transition for users who keep the app open.
+- **PWA Local Notification Limitations & Suspension Workarounds**: Since browsers suspend local JavaScript execution (including React `setInterval`) when tabs are backgrounded or the screen is locked, precise alarm triggers will be missed. To resolve this:
+  - Timetable slots check if a slot started within the last 15 minutes, allowing notifications to fire immediately when the app resumes/opens.
+  - A dedicated `cand_notified_slots_today` dictionary tracks already notified slot IDs to prevent double alerts when intervals resume.
+  - Local system timezone offset is preserved using `getLocalDateString(now)` instead of UTC `toISOString()`.
+  - Adding study hours (`handleAddStudyHours`) automatically resets the 2-hour study reminder countdown to prevent nag alerts during active usage.
 
 ---
 
